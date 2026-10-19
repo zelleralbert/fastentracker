@@ -13,8 +13,11 @@ const ready = () => !!(sync.token && sync.gist);
 const msg = t => { $('syncMsg').textContent = t; };
 // Schlägt der Abgleich fehl (z. B. Token abgelaufen), färbt sich das Einstellungs-Symbol – sonst bliebe der Fehler unbemerkt.
 const flag = () => $('gear').classList.toggle('alert', ready() && !!sync.err);
+// Ohne Zeitlimit bliebe ein hängender Abgleich (schlechtes Netz) für immer „beschäftigt“ und es würde nie wieder synchronisiert.
+const signal = () => (typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(ui.syncTimeout || 20000) : undefined);
+const slow = e => e && (e.name === 'TimeoutError' || e.name === 'AbortError');
 const gh = (path, opts = {}) => fetch('https://api.github.com' + path, {
-  cache: 'no-store', ...opts,
+  cache: 'no-store', signal: signal(), ...opts,
   headers: { Authorization: 'Bearer ' + sync.token, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
 });
 const fail = r => new Error(r.status === 401 ? 'Token ungültig oder abgelaufen' : r.status === 404 ? 'Gist nicht gefunden' : 'GitHub-Fehler ' + r.status);
@@ -28,7 +31,7 @@ export async function syncNow(manual) {
     const r = await gh('/gists/' + sync.gist);
     if (!r.ok) throw fail(r);
     const g = await r.json(), f = g.files && g.files[DATA];
-    const remote = f ? JSON.parse(f.truncated ? await (await fetch(f.raw_url, { cache: 'no-store' })).text() : f.content) : null;
+    const remote = f ? JSON.parse(f.truncated ? await (await fetch(f.raw_url, { cache: 'no-store', signal: signal() })).text() : f.content) : null;
     const merged = remote ? mergeDocs(state, remote) : sanitize(state);
     const out = JSON.stringify(merged);
     if (out !== JSON.stringify(sanitize(state))) replaceState(merged);
@@ -45,9 +48,10 @@ export async function syncNow(manual) {
     sync.last = Date.now(); delete sync.err; store(); flag();
     msg('Zuletzt synchronisiert: ' + hhmm(sync.last));
   } catch (e) {
-    msg('Sync fehlgeschlagen: ' + (e.message || e) + (navigator.onLine ? '' : ' (offline)'));
-    // Offline ist kein Fehler, auf den man reagieren muss
-    if (navigator.onLine) { sync.err = String(e.message || e); store(); flag(); }
+    const isSlow = slow(e);
+    msg('Sync fehlgeschlagen: ' + (isSlow ? 'Zeitüberschreitung, das Netz ist zu langsam' : e.message || e) + (navigator.onLine ? '' : ' (offline)'));
+    // Offline oder zu langsames Netz ist kein Fehler, auf den man reagieren muss (z. B. abgelaufenes Token)
+    if (navigator.onLine && !isSlow) { sync.err = String(e.message || e); store(); flag(); }
   } finally {
     busy = false;
     if (again) { again = false; syncNow(false); }

@@ -368,7 +368,59 @@ test('Zusammenfassung mit Daten', () => {
   ok(s.includes('zuletzt 85,0 kg'), 'Gewicht');
 });
 
+/* ---- Auslieferung: Offline-Cache und Version ---- */
+const asyncResults = [];
+async function checkFiles() {
+  const get = async f => { const r = await fetch('../' + f, { cache: 'no-store' }); if (!r.ok) throw new Error(`${f}: ${r.status}`); return r.text(); };
+  const run = async (name, fn) => { try { await fn(); asyncResults.push({ name, ok: true }); } catch (e) { asyncResults.push({ name, ok: false, err: e.message }); } };
+  const sw = await get('sw.js'), app = await get('js/app.js'), html = await get('index.html');
+  const cached = new Set([...sw.matchAll(/'\.\/([^']*)'/g)].map(m => m[1]).filter(f => f && f.includes('.')));
+
+  await run('Offline-Cache enthält jede Datei, die die App lädt', async () => {
+    const needed = new Set(['index.html', 'manifest.json', 'icon.svg']);
+    for (const m of html.matchAll(/(?:href|src)="([^"]+)"/g)) if (!m[1].startsWith('http') && !m[1].startsWith('#')) needed.add(m[1]);
+    for (const f of [...needed].filter(f => f.endsWith('.js'))) {
+      const src = await get(f);
+      for (const m of src.matchAll(/from '\.\/([^']+)'/g)) needed.add('js/' + m[1]);
+    }
+    const missing = [...needed].filter(f => !cached.has(f));
+    ok(!missing.length, 'fehlt im Cache: ' + missing.join(', '));
+  });
+
+  await run('Jede Datei im Offline-Cache existiert wirklich', async () => {
+    for (const f of cached) await get(f);
+  });
+
+  await run('Version im Service Worker passt zur App-Version', async () => {
+    const appV = app.match(/const VERSION = '([^']+)'/)?.[1], swV = sw.match(/const VERSION = '([^']+)'/)?.[1];
+    ok(appV && swV === 'tagwerk-' + appV, `App ${appV} ≠ Service Worker ${swV}`);
+  });
+
+  await run('Textfarben erreichen Kontrast 4,5:1 (hell und dunkel)', async () => {
+    const css = await get('css/app.css');
+    const vars = block => Object.fromEntries([...block.matchAll(/--([a-z-]+):(#[0-9a-f]{3,8})/gi)].map(m => [m[1], m[2]]));
+    const light = vars(css.split('@media')[0]), dark = { ...light, ...vars(css.split('prefers-color-scheme:dark){:root{')[1].split('}}')[0]) };
+    const rgb = h => { h = h.slice(1); if (h.length === 3) h = [...h].map(c => c + c).join(''); return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16) / 255); };
+    const lum = h => { const [r, g, b] = rgb(h).map(c => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+    const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+    const low = [];
+    for (const [theme, v] of [['hell', light], ['dunkel', dark]]) {
+      for (const fg of ['text', 'muted', 'faint', 'accent', 'warn']) for (const bg of ['bg', 'surface']) if (ratio(v[fg], v[bg]) < 4.5) low.push(`${theme}: ${fg} auf ${bg} ${ratio(v[fg], v[bg]).toFixed(2)}`);
+      if (ratio(v['on-accent'], v.accent) < 4.5) low.push(`${theme}: Schrift auf Akzentfläche`);
+    }
+    ok(!low.length, low.join('; '));
+  });
+
+  await run('Manifest ist gültig und zeigt auf vorhandene Dateien', async () => {
+    const m = JSON.parse(await get('manifest.json'));
+    ok(m.name && m.start_url && m.display === 'standalone', 'Pflichtfelder');
+    for (const i of m.icons) await get(i.src);
+  });
+}
+
 /* ---- Ausgabe ---- */
+await checkFiles();
+results.push(...asyncResults);
 const failed = results.filter(r => !r.ok);
 document.getElementById('out').innerHTML =
   `<h1>${failed.length ? '✗' : '✓'} ${results.length - failed.length}/${results.length} Tests bestanden</h1>` +

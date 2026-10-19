@@ -7,7 +7,7 @@ import { initTrain, renderTrain } from './train.js';
 import { initWeight, renderWeight } from './weight.js';
 import { initSync, renderSettings } from './sync.js';
 
-const VERSION = '2.5';
+const VERSION = '2.6';
 const TITLES = { fast: 'Fasten', sleep: 'Schlaf', train: 'Training', weight: 'Gewicht', settings: 'Einstellungen' };
 
 // Jeder Bereich wird einzeln abgesichert: ein Fehler in einem darf die übrigen nicht blockieren.
@@ -67,8 +67,13 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 if ('serviceWorker' in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let reloaded = false;
+  // Nicht mitten in einer Eingabe neu laden (sonst ginge z. B. eine halb getippte Notiz verloren)
+  const typing = () => { const el = document.activeElement; return !!el && /^(INPUT|TEXTAREA)$/.test(el.tagName) && !!el.value; };
+  const reload = () => { if (!reloaded) { reloaded = true; location.reload(); } };
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (hadController && !reloaded) { reloaded = true; location.reload(); }
+    if (!hadController) return;
+    if (!typing()) return reload();
+    addEventListener('focusout', () => setTimeout(() => { if (!typing()) reload(); }, 300));
   });
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
