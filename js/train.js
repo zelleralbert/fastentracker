@@ -17,7 +17,7 @@ function fillInputs() {
 export function initTrain() {
   $('tSave').onclick = () => {
     const e = ex(), max = e.unit === 'Sek.' ? 3600 : 500;
-    const reps = parseInt($('tReps').value, 10);
+    const reps = Math.round(Number(String($('tReps').value).replace(',', '.')));
     const kg = Math.round((parseFloat(String($('tKg').value).replace(',', '.')) || 0) * 2) / 2;
     if (!(reps >= 1 && reps <= max)) return alert(e.unit === 'Sek.' ? 'Bitte die Dauer in Sekunden eingeben.' : 'Bitte die Anzahl der Wiederholungen eingeben.');
     if (kg < 0 || kg > 500) return alert('Ungültiges Gewicht.');
@@ -59,7 +59,7 @@ export function renderTrain() {
   const todays = all.filter(x => dayKey(x.t) === today);
   items($('tToday'), todays.map((x, i) => ({
     html: `Satz ${i + 1} · <b>${x.reps}</b> ${e.unit}${x.kg > 0 ? ` × ${kgNum(x.kg)} kg` : ''}${x.n ? `<em>${esc(x.n)}</em>` : ''}`,
-    onDel: () => { tomb('t:' + x.ex + x.t); state.train.splice(state.train.indexOf(x), 1); save(); fillInputs(); renderTrain(); },
+    onDel: () => { tomb('t:' + x.ex + x.t); state.train.splice(state.train.indexOf(x), 1); save(); renderTrain(); },
   })), '');
   if (!todays.length) $('tToday').innerHTML = '';
 

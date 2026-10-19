@@ -1,6 +1,6 @@
 // Abgleich über ein geheimes GitHub-Gist, dazu Backup per Datei.
 import { state, save, replaceState, on, ui, saveUi } from './store.js';
-import { mergeDocs, dayKey } from './merge.js';
+import { mergeDocs, sanitize, dayKey } from './merge.js';
 import { buildSummary } from './summary.js';
 import { fmtDate, hhmm } from './logic.js';
 import { $ } from './ui.js';
@@ -27,12 +27,12 @@ export async function syncNow(manual) {
     if (!r.ok) throw fail(r);
     const g = await r.json(), f = g.files && g.files[DATA];
     const remote = f ? JSON.parse(f.truncated ? await (await fetch(f.raw_url, { cache: 'no-store' })).text() : f.content) : null;
-    const merged = remote ? mergeDocs(state, remote) : { ...state };
+    const merged = remote ? mergeDocs(state, remote) : sanitize(state);
     const out = JSON.stringify(merged);
-    if (out !== JSON.stringify(state)) replaceState(merged);
+    if (out !== JSON.stringify(sanitize(state))) replaceState(merged);
 
     const files = {};
-    if (!remote || out !== JSON.stringify(remote)) files[DATA] = { content: out };
+    if (!remote || out !== JSON.stringify(sanitize(remote))) files[DATA] = { content: out };
     // Zusammenfassung bei Datenänderung, sonst höchstens stündlich aktualisieren
     if (files[DATA] || !g.files[SUMMARY] || Date.now() - (sync.sumAt || 0) > 3600000) files[SUMMARY] = { content: buildSummary(state) };
     if (Object.keys(files).length) {
@@ -72,11 +72,12 @@ function exportData() {
 
 async function importData(file) {
   try {
-    const data = JSON.parse(await file.text());
+    const raw = JSON.parse(await file.text());
     const lists = ['history', 'sleep', 'weight', 'train'];
-    if (!data || typeof data !== 'object' || !lists.some(k => Array.isArray(data[k]))) throw new Error('keine Tagwerk-Sicherung');
-    const count = lists.reduce((a, k) => a + (Array.isArray(data[k]) ? data[k].length : 0), 0);
-    if (!confirm(`Sicherung mit ${count} Einträgen mit den vorhandenen Daten zusammenführen?`)) return;
+    if (!raw || typeof raw !== 'object' || !lists.some(k => Array.isArray(raw[k]))) throw new Error('keine Tagwerk-Sicherung');
+    const data = sanitize(raw), count = lists.reduce((a, k) => a + data[k].length, 0);
+    if (!count) throw new Error('keine gültigen Einträge gefunden');
+    if (!confirm(`Sicherung mit ${count} gültigen Einträgen mit den vorhandenen Daten zusammenführen?`)) return;
     replaceState(mergeDocs(state, data));
     save();
     $('bkMsg').textContent = `${count} Einträge eingelesen und zusammengeführt.`;
@@ -88,11 +89,14 @@ async function importData(file) {
 export function initSync() {
   on('save', schedule);
   $('syncConnect').onclick = async () => {
-    const token = $('syncToken').value.trim(), gist = $('syncGist').value.trim();
+    const token = $('syncToken').value.trim();
+    const gist = ($('syncGist').value.match(/[0-9a-f]{20,}/i) || [''])[0].toLowerCase(); // ID oder ganzer Gist-Link
     if (!token) return msg('Bitte ein Token eingeben.');
+    if ($('syncGist').value.trim() && !gist) return msg('Die Gist-ID sieht ungültig aus.');
     sync = { token, gist }; msg('Verbinde …');
     try {
-      if (!gist) {
+      if (gist) { const c = await gh('/gists/' + gist); if (!c.ok) throw fail(c); }
+      else {
         const r = await gh('/gists', { method: 'POST', body: JSON.stringify({ description: 'Tagwerk Daten', public: false, files: { [DATA]: { content: JSON.stringify(state) } } }) });
         if (!r.ok) throw r.status === 403 || r.status === 404 ? new Error('Token braucht die Berechtigung „gist“') : fail(r);
         sync.gist = (await r.json()).id;

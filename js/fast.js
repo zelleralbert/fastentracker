@@ -20,6 +20,16 @@ const phaseIdx = h => PHASES.reduce((i, [t], k) => h >= t ? k : i, 0);
 const toLocalInput = t => new Date(t - new Date(t).getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 let lastPhase = -2;
 
+// Android-Chrome erlaubt `new Notification()` nicht – dort geht es nur über den Service Worker.
+async function notify(title, body) {
+  try {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    const reg = await navigator.serviceWorker?.getRegistration();
+    if (reg) await reg.showNotification(title, { body, icon: 'icon.svg', tag: 'tagwerk-fast' });
+    else new Notification(title, { body, icon: 'icon.svg' });
+  } catch {}
+}
+
 export function initFast() {
   $('fArc').style.strokeDasharray = C;
   $('fCustom').oninput = e => { state.custom = Math.min(72, Math.max(1, Number(e.target.value) || 16)); save(); tickFast(); };
@@ -115,6 +125,6 @@ export function tickFast() {
   $('fSub').title = 'Start ' + fmtDate(c.start);
   if (done && !c.notified) {
     c.notified = true; save();
-    try { if (Notification.permission === 'granted') new Notification('Fastenziel erreicht', { body: `${c.goalH} Stunden geschafft.`, icon: 'icon.svg' }); } catch {}
+    notify('Fastenziel erreicht', `${c.goalH} Stunden geschafft.`);
   }
 }

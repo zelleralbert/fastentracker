@@ -18,6 +18,7 @@ export const hhmm = F({ hour: '2-digit', minute: '2-digit' });
 export const wd = F({ weekday: 'narrow' });
 
 export const startOfDay = t => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
+export const endOfDay = t => { const d = new Date(t); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + 1); return d.getTime(); };
 // Tagesanfänge der letzten n Tage, älteste zuerst (sommerzeitsicher)
 export function lastDays(now, n) {
   const out = [];

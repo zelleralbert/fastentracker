@@ -1,5 +1,5 @@
 import { state, save, tomb, range } from './store.js';
-import { num, fmtDay, dayKey, movingAvg, rangeStart, rangeLabel } from './logic.js';
+import { num, fmtDay, dayKey, movingAvg, rangeStart, rangeLabel, endOfDay } from './logic.js';
 import { $, stats, items, lineChart } from './ui.js';
 
 const sign = v => (v > 0 ? '+' : v < 0 ? '−' : '±') + num(Math.abs(v));
@@ -9,8 +9,9 @@ export function initWeight() {
   $('wSave').onclick = () => {
     const kg = parseFloat(String($('wKg').value).replace(',', '.')), d = $('wDate').value;
     if (!(kg >= 20 && kg <= 400)) return alert('Bitte ein Gewicht zwischen 20 und 400 kg eingeben.');
+    if (!d) return alert('Bitte ein Datum wählen.');
     const t = new Date(d + 'T12:00:00').getTime();
-    if (!d || isNaN(t) || t > Date.now() + 12 * 3600000) return alert('Bitte ein Datum, das nicht in der Zukunft liegt.');
+    if (isNaN(t) || t > Date.now() + 12 * 3600000 || t < new Date('2000-01-01').getTime()) return alert('Bitte ein Datum seit 2000, das nicht in der Zukunft liegt.');
     state.weight = state.weight.filter(x => dayKey(x.t) !== d);
     state.weight.push({ t, kg: Math.round(kg * 10) / 10, u: Date.now() });
     state.weight.sort((a, b) => a.t - b.t);
@@ -21,6 +22,10 @@ export function initWeight() {
 }
 
 export function renderWeight() {
+  // Bleibt die App über Mitternacht offen, soll das Eingabedatum nicht auf gestern stehen
+  const today = dayKey(Date.now());
+  $('wDate').max = today;
+  if (!$('wKg').value) $('wDate').value = today;
   const w = state.weight.sort((a, b) => a.t - b.t), pts = w.map(x => ({ t: x.t, v: x.kg })), trend = movingAvg(pts);
   const last = w[w.length - 1];
   if (last) {
@@ -36,7 +41,7 @@ export function renderWeight() {
     [tl && base && (before || tIn.length > 1) ? sign(tl.v - base.v) : '–', `seit ${rangeLabel(n)} (kg)`],
     [inR.length ? `${num(Math.min(...inR.map(p => p.v)))}–${num(Math.max(...inR.map(p => p.v)))}` : '–', 'Spanne (kg)'],
   ]);
-  const shown = inR.length > 1 && lineChart($('wChart'), { from, to: Date.now(), unit: 'kg', series: [{ pts: inR, dots: true, faint: true }, { pts: tIn, line: true }] });
+  const shown = inR.length > 1 && lineChart($('wChart'), { from, to: endOfDay(Date.now()), unit: 'kg', series: [{ pts: inR, dots: true, faint: true }, { pts: tIn, line: true }] });
   if (!shown) $('wChart').setAttribute('hidden', '');
   $('wLegend').hidden = !shown;
 

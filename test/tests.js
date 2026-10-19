@@ -1,5 +1,5 @@
 // Tests für Zusammenführung, Logik und Zusammenfassung. Laufen im Browser über test/index.html.
-import { mergeDocs, dayKey } from '../js/merge.js';
+import { mergeDocs, sanitize, dayKey } from '../js/merge.js';
 import { avgClock, movingAvg, suggestNext, isRecord, exById, buckets, rangeStart, D, H } from '../js/logic.js';
 import { buildSummary } from '../js/summary.js';
 
@@ -75,7 +75,7 @@ test('beendeter Schlaf startet durch alten Stand nicht neu', () => {
 test('laufendes Fasten bleibt, wenn das andere Gerät später etwas anderes ändert', () => {
   const cur = { start: T(13, 20), goalH: 16 };
   const m = mergeDocs(doc({ current: cur, mod: 5 }), doc({ current: null, weight: [{ t: T(14), kg: 80, u: 9 }], mod: 9 }));
-  eq(m.current, cur); eq(m.weight.length, 1);
+  eq(m.current.start, cur.start); eq(m.weight.length, 1);
 });
 
 test('geänderte Startzeit: neuerer Stand gewinnt', () => {
@@ -97,6 +97,62 @@ test('Merge verändert die Eingaben nicht und ist idempotent', () => {
   eq(JSON.stringify(a), sa); eq(JSON.stringify(b), sb);
   eq(mergeDocs(m, m), m);
   eq(mergeDocs(m, b), m);
+});
+
+test('gleicher Eintrag mit unterschiedlichem Inhalt: beide Geräte erhalten dasselbe Ergebnis', () => {
+  const start = T(16, 20);
+  const a = doc({ history: [{ start, end: T(17, 12), goalH: 16, reached: true }], mod: 3 });
+  const b = doc({ history: [{ start, end: T(17, 12, 5), goalH: 16, reached: true }], mod: 4 });
+  eq(mergeDocs(a, b), mergeDocs(b, a));
+  const s1 = doc({ sleep: [{ bed: T(1, 23), wake: T(2, 7) }] }), s2 = doc({ sleep: [{ bed: T(1, 23), wake: T(2, 8) }] });
+  eq(mergeDocs(s1, s2), mergeDocs(s2, s1));
+});
+
+test('gleicher Zeitstempel, unterschiedliche Einstellungen: Ergebnis hängt nicht von der Reihenfolge ab', () => {
+  const a = doc({ plan: '16:8', mod: 5 }), b = doc({ plan: '18:6', mod: 5 });
+  eq(mergeDocs(a, b), mergeDocs(b, a));
+});
+
+test('neues Fasten geht nicht verloren, wenn das andere Gerät neuer gespeichert hat', () => {
+  const oldStart = T(14, 20), newStart = T(15, 20);
+  const a = doc({ current: { start: newStart, goalH: 16 }, history: [{ start: oldStart, end: T(15, 12), goalH: 16, reached: true }], mod: 5 });
+  const b = doc({ current: { start: oldStart, goalH: 16 }, weight: [{ t: T(15), kg: 80, u: 9 }], mod: 9 });
+  eq(mergeDocs(a, b).current.start, newStart); eq(mergeDocs(b, a).current.start, newStart);
+});
+
+test('gelöschter Verlaufseintrag lässt das Fasten nicht wieder aufleben', () => {
+  const start = T(14, 20);
+  const a = doc({ current: null, deleted: { ['h:' + start]: T(16) }, mod: 9 });
+  const b = doc({ current: { start, goalH: 16 }, mod: 5 });
+  eq(mergeDocs(a, b).current, null);
+});
+
+test('beschädigte Daten werden bereinigt statt übernommen', () => {
+  const bad = {
+    plan: 5, custom: 'x', current: { start: 'jetzt', goalH: 16 }, ex: 'hack',
+    history: [{ start: T(1), end: T(1) - 5, goalH: 16 }, null, 'x', { start: T(2), end: T(3), goalH: 16, reached: true }],
+    sleep: [{ bed: T(1), wake: T(1) - 1 }, { bed: T(1, 23), wake: T(2, 7) }],
+    weight: [{ t: T(1), kg: '<img src=x onerror=alert(1)>' }, { t: T(2), kg: 81 }, { t: T(3), kg: 5 }],
+    train: [{ t: T(1), ex: 'chin', reps: 8, kg: '<b>' }, { t: T(2), ex: 'nope', reps: 8, kg: 0 }, { t: T(3), ex: 'dips', reps: 10, kg: 0, n: 'ok' }],
+    deleted: { a: 'x', b: 5 }, mod: 'neu',
+  };
+  const s = sanitize(bad);
+  eq([s.plan, s.custom, s.current, s.ex, s.mod], ['16:8', 16, null, 'chin', 0]);
+  eq([s.history.length, s.sleep.length, s.weight.length, s.train.length], [1, 1, 1, 1]);
+  eq(s.train[0].n, 'ok'); eq(s.deleted, { b: 5 });
+  eq(sanitize(s), s, 'idempotent:');
+});
+
+test('ungültige Eingaben (null, Liste, Text) lassen den Merge nicht abstürzen', () => {
+  for (const x of [null, undefined, [], 'text', 5]) {
+    const m = mergeDocs(doc({ train: [{ t: T(1), ex: 'chin', reps: 5, kg: 0 }] }), x);
+    eq(m.train.length, 1);
+  }
+});
+
+test('Merge liefert immer dieselbe Schlüsselreihenfolge', () => {
+  const a = mergeDocs({}, {}), b = mergeDocs(doc({ plan: '18:6', mod: 3 }), {});
+  eq(Object.keys(a), Object.keys(b));
 });
 
 test('alte Stände ohne deleted/Listen funktionieren', () => {

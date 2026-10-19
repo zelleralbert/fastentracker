@@ -34,7 +34,7 @@ export function items(el, rows, empty = 'Noch keine Einträge.') {
 // values(from, to) → Werte im Abschnitt; angezeigt wird ihr Durchschnitt. max: Skalenobergrenze
 export function bars(el, { list, every }, values, { max, low } = {}) {
   const vals = list.map(b => { const v = values(b.from, b.to); return v.length ? v.reduce((a, x) => a + x, 0) / v.length : null; });
-  const top = Math.max(max || 0, ...vals.filter(v => v != null));
+  const top = Math.max(max || 0, ...vals.filter(v => v != null)) || 1;
   el.innerHTML = list.map((b, i) => {
     const v = vals[i];
     const lbl = (list.length - 1 - i) % every === 0 ? b.label : '';
@@ -50,11 +50,11 @@ export function lineChart(svg, { from, to, series, unit = '', digits = 1 }) {
   if (all.length < 2) { svg.setAttribute('hidden', ''); return false; }
   let mn = Math.min(...all.map(p => p.v)), mx = Math.max(...all.map(p => p.v));
   if (mx - mn < 1) { mn -= .5; mx += .5; }
-  const W = 320, X = t => 6 + (t - from) / (to - from || 1) * (W - 12), Y = v => 118 - (v - mn) / (mx - mn) * 96;
+  const W = 320, X = t => 6 + Math.min(1, Math.max(0, (t - from) / (to - from || 1))) * (W - 12), Y = v => 118 - (v - mn) / (mx - mn) * 96;
   let out = `<line class="grid" x1="0" x2="${W}" y1="22" y2="22"/><line class="grid" x1="0" x2="${W}" y1="118" y2="118"/>`
     + `<text class="lbl" x="${W}" y="16" text-anchor="end">${num(mx, digits)} ${unit}</text>`
     + `<text class="lbl" x="${W}" y="112" text-anchor="end">${num(mn, digits)} ${unit}</text>`
-    + `<text class="lbl" x="0" y="134">${fmtShort(from)}</text><text class="lbl" x="${W}" y="134" text-anchor="end">${fmtShort(to)}</text>`;
+    + `<text class="lbl" x="0" y="134">${fmtShort(from)}</text><text class="lbl" x="${W}" y="134" text-anchor="end">${fmtShort(to - 1)}</text>`;
   for (const s of series) {
     if (s.line && s.pts.length > 1) out += `<polyline class="line" points="${s.pts.map(p => X(p.t).toFixed(1) + ',' + Y(p.v).toFixed(1)).join(' ')}"/>`;
     if (s.dots) out += s.pts.map(p => `<circle class="dot${s.faint ? ' faint' : ''}" cx="${X(p.t).toFixed(1)}" cy="${Y(p.v).toFixed(1)}" r="${s.faint ? 2.2 : 2.8}"/>`).join('');

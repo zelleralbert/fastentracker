@@ -7,8 +7,9 @@ const toLocalInput = t => new Date(t - new Date(t).getTimezoneOffset() * 60000).
 function addSleep(bed, wake) {
   if (!bed || !wake || wake <= bed) return alert('Die Aufwachzeit muss nach der Einschlafzeit liegen.'), false;
   if (wake - bed < 10 * 60000) return alert('Kürzer als 10 Minuten – nicht gespeichert.'), false;
-  if (wake - bed > 24 * H) return alert('Eine Nacht kann nicht länger als 24 Stunden dauern.'), false;
+  if (wake - bed > 24 * H) return alert('Eine Nacht kann nicht länger als 24 Stunden dauern. Brich den Schlaf ab und trage die Nacht nachträglich ein.'), false;
   if (wake > Date.now() + 60000) return alert('Die Aufwachzeit liegt in der Zukunft.'), false;
+  if (state.sleep.some(s => bed < s.wake && wake > s.bed)) return alert('Diese Zeit überschneidet sich mit einer bereits eingetragenen Nacht.'), false;
   state.sleep.push({ bed, wake });
   state.sleep.sort((a, b) => a.wake - b.wake);
   return true;

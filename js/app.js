@@ -7,10 +7,15 @@ import { initTrain, renderTrain } from './train.js';
 import { initWeight, renderWeight } from './weight.js';
 import { initSync, renderSettings } from './sync.js';
 
-const VERSION = '2.0';
+const VERSION = '2.1';
 const TITLES = { fast: 'Fasten', sleep: 'Schlaf', train: 'Training', weight: 'Gewicht', settings: 'Einstellungen' };
 
-function renderAll() { renderFast(); renderSleep(); renderTrain(); renderWeight(); renderSettings(); renderSegs(); }
+// Jeder Bereich wird einzeln abgesichert: ein Fehler in einem darf die übrigen nicht blockieren.
+function renderAll() {
+  for (const f of [renderSegs, renderFast, renderSleep, renderTrain, renderWeight, renderSettings]) {
+    try { f(); } catch (e) { console.error(f.name, e); }
+  }
+}
 
 function renderSegs() {
   document.querySelectorAll('.seg').forEach(s => {
@@ -23,18 +28,20 @@ document.addEventListener('click', e => {
   ui.range = Number(b.dataset.r); saveUi(); renderAll();
 });
 
+let current = 'fast';
 function showTab(t) {
   if (!TITLES[t]) t = 'fast';
+  current = t;
   document.querySelectorAll('[data-view]').forEach(v => { v.hidden = v.dataset.view !== t; });
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
   $('gear').classList.toggle('on', t === 'settings');
   $('title').textContent = TITLES[t];
-  if (t !== 'settings') ui.back = t;
-  ui.tab = t; saveUi();
+  // Beim nächsten Start soll der zuletzt genutzte Bereich erscheinen, nicht die Einstellungen
+  if (t !== 'settings') { ui.back = t; ui.tab = t; saveUi(); }
   scrollTo(0, 0);
 }
 document.querySelectorAll('#tabs button').forEach(b => { b.onclick = () => showTab(b.dataset.tab); });
-$('gear').onclick = () => showTab(ui.tab === 'settings' ? ui.back || 'fast' : 'settings');
+$('gear').onclick = () => showTab(current === 'settings' ? ui.back || 'fast' : 'settings');
 $('version').textContent = 'Tagwerk ' + VERSION;
 
 initFast(); initSleep(); initTrain(); initWeight();
