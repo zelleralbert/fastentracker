@@ -151,7 +151,7 @@ input[type=datetime-local]{padding:8px;border-radius:8px;border:1px solid #33415
     <div class="chips" id="exChips"></div>
     <div class="sub" id="exHint" style="margin-bottom:8px"></div>
     <div class="custom">
-      <input type="number" id="trReps" min="1" max="500" inputmode="numeric" placeholder="Wdh." style="width:80px">
+      <input type="number" id="trReps" min="1" max="3600" inputmode="numeric" placeholder="Wdh." style="width:80px">
       <span>×</span>
       <input type="number" id="trKg" min="0" max="500" step="0.5" inputmode="decimal" placeholder="+kg" style="width:80px">
       <span class="sub">Zusatzgewicht</span>
@@ -472,7 +472,8 @@ renderWeight();
 /* ---- Training ---- */
 const EXS=[['chin','Chin-ups','Zusatzgewicht optional, 0 = Körpergewicht'],['dips','Dips','Zusatzgewicht optional, 0 = Körpergewicht'],
  ['bss','Bulgarian Split Squats','Wiederholungen pro Bein, Zusatzgewicht optional'],['lat','Lateral Raises','Gewicht der Kurzhantel(n) in kg'],
- ['neck','Neck Bridge','Wiederholungen, Zusatzgewicht optional'],['dead','Dead Bugs','Wiederholungen pro Seite, Zusatzgewicht optional']];
+ ['neck','Neck Bridge','Haltedauer in Sekunden, Zusatzgewicht optional','Sek.'],['dead','Dead Bugs','Wiederholungen pro Seite, Zusatzgewicht optional']];
+const unit=()=>EXS.find(e=>e[0]===state.ex)[3]||'Wdh.';
 const exName=k=>EXS.find(e=>e[0]===k)[1];
 const dayLbl=t=>new Date(t).toLocaleDateString('de-DE',{weekday:'short',day:'2-digit',month:'2-digit'});
 const kgTxt=k=>k>0?` · +${k} kg`:'';
@@ -483,15 +484,15 @@ function renderTrain(){
   const box=$('exChips'); box.innerHTML='';
   EXS.forEach(([k,n])=>{ const b=document.createElement('button'); b.className='chip'+(state.ex===k?' on':''); b.textContent=n;
     b.onclick=()=>{ state.ex=k; save(); $('trMsg').textContent=''; fillLast(); renderTrain(); }; box.appendChild(b); });
-  $('exHint').textContent=EXS.find(e=>e[0]===state.ex)[2];
+  $('exHint').textContent=EXS.find(e=>e[0]===state.ex)[2]; $('trReps').placeholder=unit();
   const sets=exSets(), today=dayKey(Date.now()), tl=$('trToday'); tl.innerHTML='';
   sets.filter(x=>dayKey(x.t)===today).forEach((x,i)=>{ const r=document.createElement('div'); r.className='row';
-    r.innerHTML=`<div>Satz ${i+1}: <b>${x.reps} Wdh.</b>${kgTxt(x.kg)}</div><button class="del" aria-label="Löschen">✕</button>`;
+    r.innerHTML=`<div>Satz ${i+1}: <b>${x.reps} ${unit()}</b>${kgTxt(x.kg)}</div><button class="del" aria-label="Löschen">✕</button>`;
     r.querySelector('.del').onclick=()=>{ tomb('t:'+x.ex+x.t); state.train.splice(state.train.indexOf(x),1); save(); renderTrain(); }; tl.appendChild(r); });
   const days=byDay(sets), best=topSet(sets);
   $('trStats').innerHTML=best?`<div><b>${best.reps}${kgTxt(best.kg).replace(' · ','<small> ')+(best.kg>0?'</small>':'')}</b><span class="sub">Bestes Set</span></div>
     <div><b>${days.length}</b><span class="sub">Trainingstage</span></div>
-    <div><b>${sets.reduce((a,x)=>a+x.reps,0)}</b><span class="sub">Wdh. gesamt</span></div>`:'';
+    <div><b>${sets.reduce((a,x)=>a+x.reps,0)}</b><span class="sub">${unit()} gesamt</span></div>`:'';
   const svg=$('trChart'), pts=days.slice(-20).map(d=>{const t=topSet(d); return {t:t.t,v:t.reps,kg:t.kg};});
   if(pts.length>1){
     const mn=Math.min(...pts.map(p=>p.v))-1, mx=Math.max(...pts.map(p=>p.v))+1, t0=pts[0].t, t1=pts[pts.length-1].t;
@@ -499,8 +500,8 @@ function renderTrain(){
     svg.innerHTML=`<polyline fill="none" stroke="#fb923c" stroke-width="2.5" stroke-linejoin="round" points="${pts.map(p=>X(p.t).toFixed(1)+','+Y(p.v).toFixed(1)).join(' ')}"/>`
       +pts.map(p=>`<circle cx="${X(p.t).toFixed(1)}" cy="${Y(p.v).toFixed(1)}" r="3" fill="#fb923c"/>`).join('')
       +`<text x="10" y="126" fill="#94a3b8" font-size="9">${dayLbl(t0)}</text><text x="290" y="126" fill="#94a3b8" font-size="9" text-anchor="end">${dayLbl(t1)}</text>`
-      +`<text x="10" y="10" fill="#94a3b8" font-size="9">${mx-1} Wdh.</text>`;
-    svg.removeAttribute('hidden'); $('trChartLbl').textContent='Bestes Set pro Trainingstag (Wiederholungen beim höchsten Gewicht)';
+      +`<text x="10" y="10" fill="#94a3b8" font-size="9">${mx-1} ${unit()}</text>`;
+    svg.removeAttribute('hidden'); $('trChartLbl').textContent='Bestes Set pro Trainingstag (Wiederholungen bzw. Sekunden beim höchsten Gewicht)';
   } else { svg.setAttribute('hidden',''); $('trChartLbl').textContent=sets.length?'Ab dem zweiten Trainingstag erscheint hier der Verlauf.':'Noch keine Sätze für diese Übung.'; }
   const h=$('trHist'); h.innerHTML='';
   days.slice().reverse().slice(0,8).forEach(d=>{ const r=document.createElement('div'); r.className='row';
@@ -509,7 +510,7 @@ function renderTrain(){
 function fillLast(){ const l=exSets().slice(-1)[0]; $('trReps').value=l?l.reps:''; $('trKg').value=l&&l.kg?l.kg:''; }
 $('trSave').onclick=()=>{
   const reps=parseInt($('trReps').value,10), kg=Math.round((parseFloat(String($('trKg').value).replace(',','.'))||0)*2)/2;
-  if(!(reps>=1&&reps<=500)){ alert('Bitte die Anzahl der Wiederholungen eingeben.'); return; }
+  if(!(reps>=1&&reps<=(unit()==='Sek.'?3600:500))){ alert(unit()==='Sek.'?'Bitte die Dauer in Sekunden eingeben.':'Bitte die Anzahl der Wiederholungen eingeben.'); return; }
   if(kg<0||kg>500){ alert('Ungültiges Zusatzgewicht.'); return; }
   const prev=exSets(), isPR=prev.length>0&&!prev.some(x=>x.kg>kg||(x.kg===kg&&x.reps>=reps));
   state.train.push({t:Date.now(),ex:state.ex,reps,kg}); save();
