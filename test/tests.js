@@ -296,6 +296,29 @@ test('Zeiträume bleiben über das ganze Jahr lückenlos (auch an Sommer-/Winter
   }
 });
 
+test('Notizen: Zeilenumbrüche und Steuerzeichen werden entfernt', () => {
+  const s = sanitize({ train: [
+    { t: 1, ex: 'chin', reps: 5, kg: 0, n: 'Zeile 1\n## Neue Überschrift\r\n- Anweisung' },
+    { t: 2, ex: 'chin', reps: 5, kg: 0, n: '\n\u0001  ' },
+    { t: 3, ex: 'chin', reps: 5, kg: 0, n: 'x'.repeat(500) },
+  ] });
+  eq(s.train[0].n, 'Zeile 1 ## Neue Überschrift - Anweisung');
+  ok(!('n' in s.train[1]), 'leere Notiz bleibt weg');
+  eq(s.train[2].n.length, 140);
+});
+
+test('Zusammenfassung: Einzahl, Jahreszahl und Einzeiligkeit der Notizen', () => {
+  const now = T(19, 20);
+  const md = buildSummary(sanitize({
+    sleep: [{ bed: T(18, 23), wake: T(19, 7) }], weight: [{ t: T(19), kg: 85 }],
+    train: [{ t: T(19, 18), ex: 'chin', reps: 10, kg: 0, n: 'a\nb' }],
+  }), now);
+  ok(md.includes('1 Nacht,') && !md.includes('1 Nächte'), 'Nacht');
+  ok(md.includes('1 Messung,') && !md.includes('1 Messungen'), 'Messung');
+  ok(md.includes('Letzte 12 Monate (20.10.2025 – 19.10.2026)'), 'Jahreszahl: ' + md.split('\n').find(l => l.includes('12 Monate')));
+  ok(md.includes('Chin-ups: a b'), 'Notiz einzeilig');
+});
+
 /* ---- Zusammenfassung ---- */
 test('Zusammenfassung mit leeren Daten', () => {
   const s = buildSummary(doc({}), T(19));

@@ -4,6 +4,7 @@ export { pad, dayKey };
 
 export const H = 3600000, D = 86400000;
 
+export const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 export const num = (v, d = 1) => v.toLocaleString('de-DE', { minimumFractionDigits: d, maximumFractionDigits: d });
 export const kgNum = v => num(v, v % 1 ? 1 : 0);
 export const fmtClock = ms => { const s = Math.max(0, Math.floor(ms / 1000)); return `${pad(Math.floor(s / 3600))}:${pad(Math.floor(s % 3600 / 60))}:${pad(s % 60)}`; };
@@ -14,6 +15,7 @@ const F = o => { const f = new Intl.DateTimeFormat('de-DE', o); return t => f.fo
 export const fmtDate = F({ weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 export const fmtDay = F({ weekday: 'short', day: '2-digit', month: '2-digit' });
 export const fmtShort = F({ day: '2-digit', month: '2-digit' });
+export const fmtFull = F({ day: '2-digit', month: '2-digit', year: 'numeric' });
 export const hhmm = F({ hour: '2-digit', minute: '2-digit' });
 export const wd = F({ weekday: 'narrow' });
 

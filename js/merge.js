@@ -7,6 +7,8 @@ export const EX_IDS = ['chin', 'dips', 'bss', 'lat', 'neck', 'dead'];
 const num = v => typeof v === 'number' && Number.isFinite(v);
 const inRange = (v, lo, hi) => num(v) && v >= lo && v <= hi;
 const rec = v => v && typeof v === 'object' && !Array.isArray(v);
+// Notizen: nur eine Zeile ohne Steuerzeichen, damit sie weder die Anzeige noch die Zusammenfassung für Claude umbauen
+const note = v => (typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, ' ').trim().slice(0, 140) : '');
 
 // Eindeutiger Schlüssel pro Eintrag; derselbe Schlüssel wird für Lösch-Markierungen (tombstones) verwendet.
 export const KEYS = {
@@ -45,7 +47,7 @@ export function sanitize(d) {
     weight: list(d.weight, x => num(x.t) && inRange(x.kg, 20, 400)
       ? { t: x.t, kg: x.kg, ...(num(x.u) ? { u: x.u } : {}) } : null),
     train: list(d.train, x => num(x.t) && EX_IDS.includes(x.ex) && inRange(x.reps, 1, 3600) && inRange(x.kg, 0, 500)
-      ? { t: x.t, ex: x.ex, reps: x.reps, kg: x.kg, ...(typeof x.n === 'string' && x.n ? { n: x.n.slice(0, 140) } : {}) } : null),
+      ? { t: x.t, ex: x.ex, reps: x.reps, kg: x.kg, ...(note(x.n) ? { n: note(x.n) } : {}) } : null),
     ex: EX_IDS.includes(d.ex) ? d.ex : 'chin',
     deleted,
     mod: num(d.mod) && d.mod > 0 ? d.mod : 0,

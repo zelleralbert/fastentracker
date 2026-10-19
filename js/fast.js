@@ -66,7 +66,7 @@ export function renderFast() {
   }
   box.hidden = run;
   $('fCustomRow').hidden = run || state.plan !== 'Eigener';
-  $('fCustom').value = state.custom;
+  if (document.activeElement !== $('fCustom')) $('fCustom').value = state.custom;
   $('fGo').textContent = run ? 'Fasten beenden' : 'Fasten starten';
   $('fGo').classList.toggle('primary', !run);
   $('fLinks').hidden = !run;

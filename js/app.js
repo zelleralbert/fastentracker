@@ -1,13 +1,13 @@
 import { on, ui, saveUi, range } from './store.js';
 import { $ } from './ui.js';
-import { RANGES, rangeLabel } from './logic.js';
+import { RANGES, rangeLabel, dayKey } from './logic.js';
 import { initFast, renderFast, tickFast } from './fast.js';
 import { initSleep, renderSleep, tickSleep } from './sleep.js';
 import { initTrain, renderTrain } from './train.js';
 import { initWeight, renderWeight } from './weight.js';
 import { initSync, renderSettings } from './sync.js';
 
-const VERSION = '2.2';
+const VERSION = '2.3';
 const TITLES = { fast: 'Fasten', sleep: 'Schlaf', train: 'Training', weight: 'Gewicht', settings: 'Einstellungen' };
 
 // Jeder Bereich wird einzeln abgesichert: ein Fehler in einem darf die übrigen nicht blockieren.
@@ -51,7 +51,13 @@ let legacyTab = null; try { legacyTab = localStorage.getItem('fasten-v1-tab'); }
 showTab(ui.tab || legacyTab || 'fast');
 initSync();
 
-setInterval(() => { tickFast(); tickSleep(); }, 1000);
+// Über Mitternacht offen gelassen: „heute“, Zeiträume und Diagramme neu berechnen
+let shownDay = dayKey(Date.now());
+setInterval(() => {
+  tickFast(); tickSleep();
+  const d = dayKey(Date.now());
+  if (d !== shownDay) { shownDay = d; renderAll(); }
+}, 1000);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') renderAll(); });
 
 // Service Worker: neue Version wird sofort übernommen, die Seite lädt einmal neu.
