@@ -1,6 +1,6 @@
 {
-  "name": "Fastentracker",
-  "short_name": "Fasten",
+  "name": "Tagwerk",
+  "short_name": "Tagwerk",
   "lang": "de",
   "start_url": "./index.html",
   "scope": "./",

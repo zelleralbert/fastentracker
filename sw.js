@@ -1,4 +1,4 @@
-const CACHE = 'fasten-v8';
+const CACHE = 'fasten-v9';
 const FILES = ['./', './index.html', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', e => {
