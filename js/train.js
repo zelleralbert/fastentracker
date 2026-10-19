@@ -1,6 +1,7 @@
 import { state, save, tomb, range } from './store.js';
 import { EXS, exById, topSet, byDay, isRecord, suggestNext, kgNum, fmtDay, dayKey, rangeStart } from './logic.js';
 import { $, esc, stats, items, lineChart } from './ui.js';
+import { note as cleanNote } from './merge.js';
 
 const ex = () => exById(state.ex);
 const sets = () => state.train.filter(x => x.ex === state.ex);
@@ -25,8 +26,8 @@ export function initTrain() {
     if (prevSet && Date.now() - prevSet.t < 1500 && prevSet.reps === reps && prevSet.kg === kg) return; // versehentlicher Doppeltipp
     const record = isRecord(sets(), reps, kg);
     const entry = { t: Date.now(), ex: e.id, reps, kg };
-    const note = $('tNote').value.trim();
-    if (note) entry.n = note.slice(0, 140);
+    const note = cleanNote($('tNote').value);
+    if (note) entry.n = note;
     state.train.push(entry);
     save();
     $('tNote').value = '';
@@ -35,6 +36,7 @@ export function initTrain() {
     m.hidden = false; clearTimeout(msgTimer); msgTimer = setTimeout(() => { m.hidden = true; }, 2500);
     renderTrain();
   };
+  for (const id of ['tReps', 'tKg', 'tNote']) $(id).addEventListener('keydown', e => { if (e.key === 'Enter') $('tSave').click(); });
   fillInputs();
 }
 

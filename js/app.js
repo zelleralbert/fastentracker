@@ -7,7 +7,7 @@ import { initTrain, renderTrain } from './train.js';
 import { initWeight, renderWeight } from './weight.js';
 import { initSync, renderSettings } from './sync.js';
 
-const VERSION = '2.4';
+const VERSION = '2.5';
 const TITLES = { fast: 'Fasten', sleep: 'Schlaf', train: 'Training', weight: 'Gewicht', settings: 'Einstellungen' };
 
 // Jeder Bereich wird einzeln abgesichert: ein Fehler in einem darf die übrigen nicht blockieren.

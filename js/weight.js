@@ -6,6 +6,7 @@ const sign = v => (v > 0 ? '+' : v < 0 ? '−' : '±') + num(Math.abs(v));
 
 export function initWeight() {
   $('wDate').value = $('wDate').dataset.def = dayKey(Date.now());
+  $('wKg').addEventListener('keydown', e => { if (e.key === 'Enter') $('wSave').click(); });
   $('wSave').onclick = () => {
     const kg = parseFloat(String($('wKg').value).replace(',', '.')), d = $('wDate').value;
     if (!(kg >= 20 && kg <= 400)) return alert('Bitte ein Gewicht zwischen 20 und 400 kg eingeben.');

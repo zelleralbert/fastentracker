@@ -6,9 +6,11 @@ export const dayKey = t => { const d = new Date(t); return `${d.getFullYear()}-$
 export const EX_IDS = ['chin', 'dips', 'bss', 'lat', 'neck', 'dead'];
 const num = v => typeof v === 'number' && Number.isFinite(v);
 const inRange = (v, lo, hi) => num(v) && v >= lo && v <= hi;
+// Zeitpunkte: 2000 bis 2100. Alles andere (z. B. 1e20) würde beim Formatieren eine Ausnahme auslösen und einen Bereich lahmlegen.
+const isTime = v => inRange(v, 946684800000, 4102444800000);
 const rec = v => v && typeof v === 'object' && !Array.isArray(v);
 // Notizen: nur eine Zeile ohne Steuerzeichen, damit sie weder die Anzeige noch die Zusammenfassung für Claude umbauen
-const note = v => (typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, ' ').trim().slice(0, 140) : '');
+export const note = v => (typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, ' ').trim().slice(0, 140) : '');
 
 // Eindeutiger Schlüssel pro Eintrag; derselbe Schlüssel wird für Lösch-Markierungen (tombstones) verwendet.
 export const KEYS = {
@@ -30,7 +32,7 @@ export function sanitize(d) {
   d = rec(d) ? d : {};
   const list = (v, fn) => (Array.isArray(v) ? v : []).map(x => (rec(x) ? fn(x) : null)).filter(Boolean);
 
-  const current = rec(d.current) && num(d.current.start) && inRange(d.current.goalH, 1, 72)
+  const current = rec(d.current) && isTime(d.current.start) && inRange(d.current.goalH, 1, 72)
     ? { start: d.current.start, goalH: d.current.goalH, notified: d.current.notified === true } : null;
   const deleted = {};
   // Schlüssel sortieren: sonst unterscheiden sich gleiche Stände nur in der Reihenfolge und werden endlos neu hochgeladen
@@ -40,13 +42,13 @@ export function sanitize(d) {
     plan: typeof d.plan === 'string' && d.plan.length <= 12 ? d.plan : '16:8',
     custom: inRange(d.custom, 1, 72) ? d.custom : 16,
     current,
-    history: list(d.history, x => num(x.start) && num(x.end) && x.end > x.start && inRange(x.goalH, 1, 72)
+    history: list(d.history, x => isTime(x.start) && isTime(x.end) && x.end > x.start && inRange(x.goalH, 1, 72)
       ? { start: x.start, end: x.end, goalH: x.goalH, reached: x.reached === true } : null),
-    sleep: list(d.sleep, x => num(x.bed) && num(x.wake) && x.wake > x.bed ? { bed: x.bed, wake: x.wake } : null),
-    sleepNow: num(d.sleepNow) ? d.sleepNow : null,
-    weight: list(d.weight, x => num(x.t) && inRange(x.kg, 20, 400)
+    sleep: list(d.sleep, x => isTime(x.bed) && isTime(x.wake) && x.wake > x.bed ? { bed: x.bed, wake: x.wake } : null),
+    sleepNow: isTime(d.sleepNow) ? d.sleepNow : null,
+    weight: list(d.weight, x => isTime(x.t) && inRange(x.kg, 20, 400)
       ? { t: x.t, kg: x.kg, ...(num(x.u) ? { u: x.u } : {}) } : null),
-    train: list(d.train, x => num(x.t) && EX_IDS.includes(x.ex) && inRange(x.reps, 1, 3600) && inRange(x.kg, 0, 500)
+    train: list(d.train, x => isTime(x.t) && EX_IDS.includes(x.ex) && inRange(x.reps, 1, 3600) && inRange(x.kg, 0, 500)
       ? { t: x.t, ex: x.ex, reps: x.reps, kg: x.kg, ...(note(x.n) ? { n: note(x.n) } : {}) } : null),
     ex: EX_IDS.includes(d.ex) ? d.ex : 'chin',
     deleted,

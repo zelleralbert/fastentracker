@@ -143,6 +143,17 @@ test('beschädigte Daten werden bereinigt statt übernommen', () => {
   eq(sanitize(s), s, 'idempotent:');
 });
 
+test('unmögliche Zeitpunkte werden verworfen (sonst Ausnahme beim Formatieren)', () => {
+  const s = sanitize({
+    train: [{ t: 1e20, ex: 'chin', reps: 5, kg: 0 }, { t: 5, ex: 'chin', reps: 5, kg: 0 }, { t: T(1), ex: 'chin', reps: 5, kg: 0 }],
+    weight: [{ t: 8.64e15 + 1, kg: 80 }, { t: T(1), kg: 80 }],
+    sleep: [{ bed: 1, wake: 2 }, { bed: T(1, 23), wake: T(2, 7) }],
+    history: [{ start: T(1), end: 1e300, goalH: 16 }],
+    current: { start: -5, goalH: 16 }, sleepNow: 1e20,
+  });
+  eq([s.train.length, s.weight.length, s.sleep.length, s.history.length, s.current, s.sleepNow], [1, 1, 1, 0, null, null]);
+});
+
 test('ungültige Eingaben (null, Liste, Text) lassen den Merge nicht abstürzen', () => {
   for (const x of [null, undefined, [], 'text', 5]) {
     const m = mergeDocs(doc({ train: [{ t: T(1), ex: 'chin', reps: 5, kg: 0 }] }), x);
@@ -156,7 +167,7 @@ test('Merge liefert immer dieselbe Schlüsselreihenfolge', () => {
 });
 
 test('alte Stände ohne deleted/Listen funktionieren', () => {
-  const m = mergeDocs({ plan: '16:8' }, { train: [{ t: 1, ex: 'chin', reps: 5, kg: 0 }] });
+  const m = mergeDocs({ plan: '16:8' }, { train: [{ t: T(1), ex: 'chin', reps: 5, kg: 0 }] });
   eq(m.train.length, 1); eq(m.history, []); eq(m.deleted, {});
 });
 
@@ -312,9 +323,9 @@ test('Zeiträume bleiben über das ganze Jahr lückenlos (auch an Sommer-/Winter
 
 test('Notizen: Zeilenumbrüche und Steuerzeichen werden entfernt', () => {
   const s = sanitize({ train: [
-    { t: 1, ex: 'chin', reps: 5, kg: 0, n: 'Zeile 1\n## Neue Überschrift\r\n- Anweisung' },
-    { t: 2, ex: 'chin', reps: 5, kg: 0, n: '\n\u0001  ' },
-    { t: 3, ex: 'chin', reps: 5, kg: 0, n: 'x'.repeat(500) },
+    { t: T(1), ex: 'chin', reps: 5, kg: 0, n: 'Zeile 1\n## Neue Überschrift\r\n- Anweisung' },
+    { t: T(2), ex: 'chin', reps: 5, kg: 0, n: '\n\u0001  ' },
+    { t: T(3), ex: 'chin', reps: 5, kg: 0, n: 'x'.repeat(500) },
   ] });
   eq(s.train[0].n, 'Zeile 1 ## Neue Überschrift - Anweisung');
   ok(!('n' in s.train[1]), 'leere Notiz bleibt weg');

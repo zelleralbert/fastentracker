@@ -33,6 +33,8 @@ async function notify(title, body) {
 export function initFast() {
   $('fArc').style.strokeDasharray = C;
   $('fCustom').oninput = e => { state.custom = Math.min(72, Math.max(1, Number(e.target.value) || 16)); save(); tickFast(); };
+  // Wurde ein ungültiger Wert getippt (z. B. 100), zeigt das Feld nach dem Verlassen den tatsächlich gespeicherten
+  $('fCustom').onchange = () => { $('fCustom').value = state.custom; };
   $('fGo').onclick = () => {
     const c = state.current;
     if (!c) {
