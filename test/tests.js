@@ -252,6 +252,20 @@ test('Vorschlag: Neck Bridge steigert um 5 Sekunden', () => {
   eq(suggestNext(sets, exById('neck'), T(20)).next, '35 / 40');
 });
 
+test('Vorschlag: ein einzelner schwerer Test-Satz bestimmt nicht das Arbeitsgewicht', () => {
+  const sets = [{ t: T(18, 18), ex: 'chin', reps: 10, kg: 0 }, { t: T(18, 18, 3), ex: 'chin', reps: 10, kg: 0 }, { t: T(18, 18, 6), ex: 'chin', reps: 3, kg: 10 }];
+  const s = suggestNext(sets, exById('chin'), T(20));
+  eq(s.last, '10 / 10'); eq(s.next, '10 / 11');
+  // zwei Sätze mit Zusatzgewicht: das schwerere Gewicht zählt
+  const heavy = [...sets, { t: T(18, 18, 9), ex: 'chin', reps: 4, kg: 10 }];
+  eq(suggestNext(heavy, exById('chin'), T(20)).last, '3 / 4 · 10 kg');
+});
+
+test('Wochentage in den Balken sind eindeutig', () => {
+  const labels = buckets(T(20, 12), 7).list.map(b => b.label);
+  eq(new Set(labels).size, 7); ok(labels.every(l => l.length === 2 && !l.includes('.')), labels.join(','));
+});
+
 test('Vorschlag: ohne frühere Einheit keiner', () => {
   eq(suggestNext([{ t: T(20, 9), ex: 'chin', reps: 5, kg: 0 }], exById('chin'), T(20, 18)), null);
 });

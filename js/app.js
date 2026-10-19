@@ -7,7 +7,7 @@ import { initTrain, renderTrain } from './train.js';
 import { initWeight, renderWeight } from './weight.js';
 import { initSync, renderSettings } from './sync.js';
 
-const VERSION = '2.3';
+const VERSION = '2.4';
 const TITLES = { fast: 'Fasten', sleep: 'Schlaf', train: 'Training', weight: 'Gewicht', settings: 'Einstellungen' };
 
 // Jeder Bereich wird einzeln abgesichert: ein Fehler in einem darf die übrigen nicht blockieren.
@@ -19,7 +19,7 @@ function renderAll() {
 
 function renderSegs() {
   document.querySelectorAll('.seg').forEach(s => {
-    s.innerHTML = RANGES.map(n => `<button data-r="${n}" class="${range() === n ? 'on' : ''}">${rangeLabel(n)}</button>`).join('');
+    s.innerHTML = RANGES.map(n => `<button data-r="${n}" class="${range() === n ? 'on' : ''}" aria-pressed="${range() === n}">${rangeLabel(n)}</button>`).join('');
   });
 }
 document.addEventListener('click', e => {
@@ -33,7 +33,10 @@ function showTab(t) {
   if (!TITLES[t]) t = 'fast';
   current = t;
   document.querySelectorAll('[data-view]').forEach(v => { v.hidden = v.dataset.view !== t; });
-  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+  document.querySelectorAll('#tabs button').forEach(b => {
+    b.classList.toggle('on', b.dataset.tab === t);
+    if (b.dataset.tab === t) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+  });
   $('gear').classList.toggle('on', t === 'settings');
   $('title').textContent = TITLES[t];
   // Beim nächsten Start soll der zuletzt genutzte Bereich erscheinen, nicht die Einstellungen

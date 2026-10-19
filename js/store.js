@@ -6,7 +6,12 @@ export const KEY = 'fasten-v1';
 const DEF = () => sanitize({});
 
 const read = (k, fb) => { try { return JSON.parse(localStorage.getItem(k)) || fb; } catch { return fb; } };
-const write = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+let warned = false;
+// Schlägt das Speichern fehl (voller Speicher, privater Modus), einmal deutlich warnen – sonst gehen Eingaben unbemerkt verloren.
+const write = (k, v) => {
+  try { localStorage.setItem(k, JSON.stringify(v)); }
+  catch { if (!warned) { warned = true; setTimeout(() => alert('Die Daten konnten auf diesem Gerät nicht gespeichert werden (Speicher voll oder privater Modus). Nutze die Synchronisierung oder exportiere ein Backup.'), 0); } }
+};
 
 // Beim Laden bereinigen: ein beschädigter Eintrag darf die App nicht lahmlegen.
 export const state = sanitize(read(KEY, {}));

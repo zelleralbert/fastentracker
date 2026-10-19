@@ -33,12 +33,12 @@ export function items(el, rows, empty = 'Noch keine Einträge.') {
 // Balken je Abschnitt (Tag/Woche/Monat, siehe logic.buckets).
 // values(from, to) → Werte im Abschnitt; angezeigt wird ihr Durchschnitt. max: Skalenobergrenze
 export function bars(el, { list, every }, values, { max, low } = {}) {
-  const vals = list.map(b => { const v = values(b.from, b.to); return v.length ? v.reduce((a, x) => a + x, 0) / v.length : null; });
+  const vals = list.map((b, i) => { const v = values(b.from, b.to, i); return v.length ? v.reduce((a, x) => a + x, 0) / v.length : null; });
   const top = Math.max(max || 0, ...vals.filter(v => v != null)) || 1;
   el.innerHTML = list.map((b, i) => {
     const v = vals[i];
     const lbl = (list.length - 1 - i) % every === 0 ? b.label : '';
-    const cls = v == null ? 'none' : low && low(v) ? 'low' : '';
+    const cls = v == null ? 'none' : low && low(v, i) ? 'low' : '';
     const h = v == null ? 0 : Math.max(3, v / top * 100);
     return `<div title="${fmtShort(b.from)}${v != null ? ': ' + num(v) : ''}"><i class="${cls}" style="height:${h}%"></i><span>${lbl}</span></div>`;
   }).join('');

@@ -21,6 +21,8 @@ export function initTrain() {
     const kg = Math.round((parseFloat(String($('tKg').value).replace(',', '.')) || 0) * 2) / 2;
     if (!(reps >= 1 && reps <= max)) return alert(e.unit === 'Sek.' ? 'Bitte die Dauer in Sekunden eingeben.' : 'Bitte die Anzahl der Wiederholungen eingeben.');
     if (kg < 0 || kg > 500) return alert('Ungültiges Gewicht.');
+    const prevSet = sets().slice(-1)[0];
+    if (prevSet && Date.now() - prevSet.t < 1500 && prevSet.reps === reps && prevSet.kg === kg) return; // versehentlicher Doppeltipp
     const record = isRecord(sets(), reps, kg);
     const entry = { t: Date.now(), ex: e.id, reps, kg };
     const note = $('tNote').value.trim();
@@ -43,6 +45,7 @@ export function renderTrain() {
   for (const x of EXS) {
     const b = document.createElement('button');
     b.className = 'chip' + (x.id === e.id ? ' on' : '');
+    b.setAttribute('aria-pressed', x.id === e.id);
     b.textContent = x.name;
     b.onclick = () => { state.ex = x.id; save(); $('tMsg').hidden = true; fillInputs(); renderTrain(); };
     box.appendChild(b);

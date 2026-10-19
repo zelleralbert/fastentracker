@@ -17,7 +17,8 @@ export const fmtDay = F({ weekday: 'short', day: '2-digit', month: '2-digit' });
 export const fmtShort = F({ day: '2-digit', month: '2-digit' });
 export const fmtFull = F({ day: '2-digit', month: '2-digit', year: 'numeric' });
 export const hhmm = F({ hour: '2-digit', minute: '2-digit' });
-export const wd = F({ weekday: 'narrow' });
+const wdF = F({ weekday: 'short' });
+export const wd = t => wdF(t).replace('.', ''); // „Mo“, „Di“ … statt „M“, „D“ (Di/Do waren nicht unterscheidbar)
 
 export const startOfDay = t => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
 export const endOfDay = t => { const d = new Date(t); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + 1); return d.getTime(); };
@@ -105,11 +106,14 @@ export function suggestNext(sets, ex, now = Date.now()) {
   const days = byDay(sets.filter(x => dayKey(x.t) !== today));
   if (!days.length) return null;
   const last = days[days.length - 1];
-  const kg = Math.max(...last.map(x => x.kg));
+  // Arbeitsgewicht = schwerstes Gewicht mit mindestens zwei Sätzen (ein einzelner Test-Satz bestimmt den Vorschlag nicht)
+  const count = k => last.filter(x => x.kg === k).length;
+  const kgs = [...new Set(last.map(x => x.kg))];
+  const kg = Math.max(...(kgs.filter(k => count(k) >= 2).length ? kgs.filter(k => count(k) >= 2) : kgs));
   const r = last.filter(x => x.kg === kg).map(x => x.reps);
   const kgTxt = k => k > 0 ? ` · ${kgNum(k)} kg` : '';
   const res = { day: last[0].t, last: r.join(' / ') + kgTxt(kg) };
   if (Math.min(...r) >= ex.cap) return { ...res, up: true, next: `${kgNum(kg + ex.step)} kg`, kg: kg + ex.step };
-  const nx = r.slice(); nx[nx.indexOf(Math.min(...nx))] += ex.inc || 1;
+  const nx = r.slice(); nx[nx.lastIndexOf(Math.min(...nx))] += ex.inc || 1; // bei Gleichstand der letzte (müdeste) Satz
   return { ...res, up: false, next: nx.join(' / ') + kgTxt(kg), reps: nx[0], kg };
 }

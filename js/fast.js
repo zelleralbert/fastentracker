@@ -60,6 +60,7 @@ export function renderFast() {
   if (!run) for (const p of PLANS) {
     const b = document.createElement('button');
     b.className = 'chip' + (state.plan === p.n ? ' on' : '');
+    b.setAttribute('aria-pressed', state.plan === p.n);
     b.textContent = p.n;
     b.onclick = () => { state.plan = p.n; save(); renderFast(); };
     box.appendChild(b);
@@ -80,8 +81,9 @@ export function renderFast() {
     [d.length ? num(avg(d)) + ' h' : '–', 'Ø Dauer'],
     [d.length ? num(Math.max(...d)) + ' h' : '–', 'Längstes'],
   ]);
-  bars($('fBars'), buckets(Date.now(), n), (a, b) => f.filter(x => x.end >= a && x.end < b).map(x => (x.end - x.start) / H),
-    { max: 16, low: v => v < goalH() });
+  // Farbe nach dem damaligen Ziel, nicht nach dem aktuell gewählten Plan: orange, sobald im Abschnitt ein Ziel verfehlt wurde
+  const bk = buckets(Date.now(), n), inB = bk.list.map(b => f.filter(x => x.end >= b.from && x.end < b.to));
+  bars($('fBars'), bk, (a, b, i) => inB[i].map(x => (x.end - x.start) / H), { max: 16, low: (v, i) => inB[i].some(x => !x.reached) });
 
   items($('fHist'), () => state.history.filter(x => x.end >= rangeStart(Date.now(), Math.max(n, 30))).reverse().map(x => ({
     html: `${fmtDay(x.start)}, ${hhmm(x.start)}<small>${fmtDur(x.end - x.start)} · Ziel ${x.goalH} h ${x.reached ? '<span class="ok">✓</span>' : ''}</small>`,
