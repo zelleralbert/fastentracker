@@ -37,6 +37,10 @@ h2{font-size:1rem;color:var(--muted);margin:24px 0 8px;font-weight:600}
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center}
 .stats b{display:block;font-size:1.4rem}
 .center-txt{text-align:center}
+.bars{display:flex;gap:6px;align-items:flex-end;height:120px;margin-top:16px}
+.bars>div{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;font-size:.7rem;color:var(--muted)}
+.bars i{display:block;width:100%;background:#818cf8;border-radius:6px 6px 0 0;min-height:2px}
+.bars i.low{background:var(--warn)}
 .ph{display:flex;gap:12px;padding:10px 0 10px 10px;border-left:3px solid #334155;margin-left:4px;opacity:.55}
 .ph.past{opacity:.8;border-color:var(--accent)}
 .ph.now{opacity:1;border-color:var(--accent);background:#0f172a55;border-radius:0 10px 10px 0}
@@ -85,6 +89,21 @@ input[type=datetime-local]{padding:8px;border-radius:8px;border:1px solid #33415
   <div class="card" id="phases"></div>
   <p class="sub" style="font-size:.8rem">Hinweis: Die Zeitangaben sind Richtwerte und variieren individuell. Die Studienlage ist teils begrenzt. Das ist keine medizinische Beratung; bei Vorerkrankungen, Schwangerschaft oder Medikamenten bitte vorher ärztlich klären.</p>
 
+  <h2>Schlaf</h2>
+  <div class="card">
+    <div class="center-txt sub" id="sleepInfo" style="margin-bottom:10px"></div>
+    <button class="btn" id="sleepBtn" style="background:#818cf8;color:#1e1b4b">Schlafen gehen</button>
+    <div class="center-txt"><button class="link" id="sleepManualBtn">Nacht manuell eintragen</button></div>
+    <div id="sleepManual" hidden>
+      <div class="custom"><label style="min-width:90px" for="bedIn">Eingeschlafen</label><input type="datetime-local" id="bedIn" style="width:auto"></div>
+      <div class="custom"><label style="min-width:90px" for="wakeIn">Aufgewacht</label><input type="datetime-local" id="wakeIn" style="width:auto"></div>
+      <button class="btn" id="sleepSave" style="background:#818cf8;color:#1e1b4b">Speichern</button>
+    </div>
+    <div class="stats" id="sleepStats" style="margin-top:16px"></div>
+    <div class="bars" id="sleepBars"></div>
+    <div id="sleepList" style="margin-top:12px"></div>
+  </div>
+
   <h2>Statistik</h2>
   <div class="card stats" id="stats"></div>
 
@@ -110,8 +129,9 @@ const $ = id => document.getElementById(id);
 
 let state = load();
 function load(){
-  try { return Object.assign({plan:'16:8',custom:16,current:null,history:[]}, JSON.parse(localStorage.getItem(KEY))||{}); }
-  catch { return {plan:'16:8',custom:16,current:null,history:[]}; }
+  const def={plan:'16:8',custom:16,current:null,history:[],sleep:[],sleepNow:null};
+  try { return Object.assign(def, JSON.parse(localStorage.getItem(KEY))||{}); }
+  catch { return def; }
 }
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch{} }
 
@@ -223,6 +243,57 @@ $('saveStart').onclick=()=>{
   if(!t||t>Date.now()){ alert('Bitte eine Zeit in der Vergangenheit wählen.'); return; }
   state.current.start=t; state.current.notified=false; save(); $('editBox').hidden=true; render();
 };
+
+/* ---- Schlaf ---- */
+const fmtH = ms => { const m=Math.round(ms/60000); return `${Math.floor(m/60)}h ${pad(m%60)}m`; };
+const hhmm = t => new Date(t).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
+function avgClock(times){ // Uhrzeiten um Mitternacht herum korrekt mitteln (Skala ab 12:00)
+  const m=times.map(t=>{const d=new Date(t);return (d.getHours()*60+d.getMinutes()+720)%1440;});
+  const a=Math.round(m.reduce((x,y)=>x+y,0)/m.length+720)%1440;
+  return `${pad(Math.floor(a/60))}:${pad(a%60)}`;
+}
+function addSleep(bed,wake){
+  if(!bed||!wake||wake<=bed){ alert('Die Aufwachzeit muss nach der Einschlafzeit liegen.'); return false; }
+  if(wake-bed<10*60000){ alert('Der Schlaf war kürzer als 10 Minuten und wurde nicht gespeichert.'); return false; }
+  if(wake-bed>24*3600000){ alert('Eine Nacht kann nicht länger als 24 Stunden dauern.'); return false; }
+  if(wake>Date.now()+60000){ alert('Die Aufwachzeit liegt in der Zukunft.'); return false; }
+  state.sleep.push({bed,wake}); state.sleep.sort((a,b)=>a.wake-b.wake); save(); return true;
+}
+function renderSleep(){
+  const s=state.sleep, now=state.sleepNow;
+  $('sleepBtn').textContent=now?'Aufgewacht':'Schlafen gehen';
+  $('sleepInfo').textContent=now?`Schlafend seit ${fmtDate(now)}`:(s.length?`Letzte Nacht: ${fmtH(s[s.length-1].wake-s[s.length-1].bed)}`:'Noch keine Nächte erfasst.');
+  const last=s.slice(-7);
+  if(last.length){
+    const avg=last.reduce((a,x)=>a+(x.wake-x.bed),0)/last.length;
+    $('sleepStats').innerHTML=`<div><b>${fmtH(avg)}</b><span class="sub">Ø Schlaf (${last.length} N.)</span></div>
+      <div><b>${avgClock(last.map(x=>x.bed))}</b><span class="sub">Ø ins Bett</span></div>
+      <div><b>${avgClock(last.map(x=>x.wake))}</b><span class="sub">Ø Aufstehen</span></div>`;
+    $('sleepBars').innerHTML=last.map(x=>{const h=(x.wake-x.bed)/3600000;
+      return `<div title="${h.toFixed(1)} h"><span>${h.toFixed(1)}</span><i class="${h<7?'low':''}" style="height:${Math.min(100,h/12*100)}%"></i><span>${new Date(x.wake).toLocaleDateString('de-DE',{weekday:'short'})}</span></div>`;}).join('');
+  } else { $('sleepStats').innerHTML=''; $('sleepBars').innerHTML=''; }
+  const box=$('sleepList'); box.innerHTML='';
+  s.slice().reverse().slice(0,14).forEach(x=>{
+    const idx=s.indexOf(x), r=document.createElement('div'); r.className='row';
+    r.innerHTML=`<div><div>${fmtDate(x.bed)} → ${hhmm(x.wake)}</div><div class="sub">${fmtH(x.wake-x.bed)}</div></div><button class="del" aria-label="Löschen">✕</button>`;
+    r.querySelector('.del').onclick=()=>{ if(confirm('Nacht löschen?')){ s.splice(idx,1); save(); renderSleep(); } };
+    box.appendChild(r);
+  });
+}
+$('sleepBtn').onclick=()=>{
+  if(!state.sleepNow){ state.sleepNow=Date.now(); save(); }
+  else if(addSleep(state.sleepNow,Date.now())){ state.sleepNow=null; save(); }
+  renderSleep();
+};
+$('sleepManualBtn').onclick=()=>{
+  const b=$('sleepManual'); b.hidden=!b.hidden;
+  if(!b.hidden){ const d=new Date(); d.setHours(7,0,0,0); if(d>Date.now()) d.setDate(d.getDate()-1);
+    $('wakeIn').value=toLocalInput(d.getTime()); $('bedIn').value=toLocalInput(d.getTime()-8*3600000); }
+};
+$('sleepSave').onclick=()=>{
+  if(addSleep(new Date($('bedIn').value).getTime(),new Date($('wakeIn').value).getTime())){ $('sleepManual').hidden=true; renderSleep(); }
+};
+renderSleep();
 
 setInterval(tick,1000);
 document.addEventListener('visibilitychange',tick);
