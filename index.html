@@ -56,7 +56,7 @@ input[type=datetime-local]{padding:8px;border-radius:8px;border:1px solid #33415
 </head>
 <body>
 <main>
-  <h1>⏱ Fastentracker</h1>
+  <div style="display:flex;justify-content:space-between;align-items:center"><h1>⏱ Fastentracker</h1><button class="del" id="syncGear" aria-label="Synchronisierung" style="font-size:1.4rem;margin-bottom:12px">⚙️</button></div>
 <div data-view="fast">
 
   <div class="card">
@@ -127,6 +127,24 @@ input[type=datetime-local]{padding:8px;border-radius:8px;border:1px solid #33415
     <div id="wList" style="margin-top:12px"></div>
   </div>
 </div>
+<div data-view="sync" hidden>
+  <h2>Synchronisierung</h2>
+  <div class="card">
+    <p class="sub" style="margin-top:0">Deine Daten werden in einer <b>privaten GitHub-Gist-Datei</b> gespeichert und zwischen deinen Geräten abgeglichen.</p>
+    <div id="syncSetup">
+      <p class="sub">1. Erstelle ein <a href="https://github.com/settings/tokens/new?scopes=gist&description=Fastentracker" target="_blank" rel="noopener" style="color:var(--accent)">Token mit Berechtigung „gist“</a>.<br>2. Füge es hier ein. Es wird nur auf diesem Gerät gespeichert.<br>3. Auf dem zweiten Gerät gibst du dasselbe Token und die Gist-ID ein.</p>
+      <input type="password" id="syncToken" placeholder="GitHub-Token" autocomplete="off" style="width:100%;padding:10px;border-radius:8px;border:1px solid #334155;background:var(--bg);color:var(--text);font:inherit;margin-bottom:8px">
+      <input type="text" id="syncGist" placeholder="Gist-ID (leer = neuen anlegen)" autocomplete="off" style="width:100%;padding:10px;border-radius:8px;border:1px solid #334155;background:var(--bg);color:var(--text);font:inherit;margin-bottom:8px">
+      <button class="btn" id="syncConnect" style="background:#a78bfa;color:#2e1065">Verbinden</button>
+    </div>
+    <div id="syncOn" hidden>
+      <div class="row"><span class="sub">Gist-ID</span><code id="syncGistShow" style="font-size:.8rem;word-break:break-all"></code></div>
+      <button class="btn" id="syncNow" style="background:#a78bfa;color:#2e1065;margin-top:12px">Jetzt synchronisieren</button>
+      <div class="center-txt"><button class="link" id="syncOff">Trennen (Daten bleiben lokal)</button></div>
+    </div>
+    <div class="phase" id="syncMsg" style="color:var(--muted)"></div>
+  </div>
+</div>
 <div data-view="train" hidden>
   <h2>Training</h2>
   <div class="card">
@@ -181,11 +199,13 @@ const $ = id => document.getElementById(id);
 
 let state = load();
 function load(){
-  const def={plan:'16:8',custom:16,current:null,history:[],sleep:[],sleepNow:null,weight:[],train:[],ex:'chin'};
+  const def={plan:'16:8',custom:16,current:null,history:[],sleep:[],sleepNow:null,weight:[],train:[],ex:'chin',deleted:{},mod:0};
   try { return Object.assign(def, JSON.parse(localStorage.getItem(KEY))||{}); }
   catch { return def; }
 }
-function save(){ try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch{} }
+function saveLocal(){ try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch{} }
+function save(){ state.mod=Date.now(); saveLocal(); scheduleSync(); }
+function tomb(k){ (state.deleted=state.deleted||{})[k]=Date.now(); }
 
 const goalH = () => state.plan==='Eigener' ? Number(state.custom)||16 : PLANS.find(p=>p.n===state.plan).h;
 const pad = n => String(n).padStart(2,'0');
@@ -263,7 +283,7 @@ function renderHistory(){
     r.innerHTML=`<div><div>${fmtDate(x.start)}</div><div class="sub">${d.toFixed(1)} h von ${x.goalH} h</div></div>
       <div><span class="${x.reached?'ok':'no'}">${x.reached?'✓ geschafft':'vorzeitig'}</span>
       <button class="del" aria-label="Löschen">✕</button></div>`;
-    r.querySelector('.del').onclick=()=>{ if(confirm('Eintrag löschen?')){ state.history.splice(idx,1); save(); render(); } };
+    r.querySelector('.del').onclick=()=>{ if(confirm('Eintrag löschen?')){ tomb('h:'+state.history[idx].start); state.history.splice(idx,1); save(); render(); } };
     box.appendChild(r);
   });
 }
@@ -328,7 +348,7 @@ function renderSleep(){
   s.slice().reverse().slice(0,14).forEach(x=>{
     const idx=s.indexOf(x), r=document.createElement('div'); r.className='row';
     r.innerHTML=`<div><div>${fmtDate(x.bed)} → ${hhmm(x.wake)}</div><div class="sub">${fmtH(x.wake-x.bed)}</div></div><button class="del" aria-label="Löschen">✕</button>`;
-    r.querySelector('.del').onclick=()=>{ if(confirm('Nacht löschen?')){ s.splice(idx,1); save(); renderSleep(); } };
+    r.querySelector('.del').onclick=()=>{ if(confirm('Nacht löschen?')){ tomb('s:'+s[idx].bed); s.splice(idx,1); save(); renderSleep(); } };
     box.appendChild(r);
   });
 }
@@ -346,6 +366,69 @@ $('sleepSave').onclick=()=>{
   if(addSleep(new Date($('bedIn').value).getTime(),new Date($('wakeIn').value).getTime())){ $('sleepManual').hidden=true; renderSleep(); }
 };
 renderSleep();
+
+/* ---- Sync (privates GitHub Gist) ---- */
+const SYNC_KEY='fasten-sync', GFILE='fastentracker.json';
+let sync=(()=>{ try{ return JSON.parse(localStorage.getItem(SYNC_KEY))||{}; }catch{ return {}; } })();
+let syncTimer=null, syncBusy=false;
+const saveSync=()=>{ try{ localStorage.setItem(SYNC_KEY,JSON.stringify(sync)); }catch{} };
+const gh=(path,opts={})=>fetch('https://api.github.com'+path,{...opts,headers:{'Authorization':'Bearer '+sync.token,'Accept':'application/vnd.github+json','Content-Type':'application/json'}});
+function mergeDocs(a,b){
+  const dead={}; [a.deleted||{},b.deleted||{}].forEach(d=>Object.entries(d).forEach(([k,t])=>{ dead[k]=Math.max(dead[k]||0,t); }));
+  const un=(la,lb,key,order)=>{ const m=new Map();
+    [...(la||[]),...(lb||[])].forEach(x=>{ const k=key(x); if(k in dead && dead[k]>=(x.u||0)) return; const o=m.get(k); if(!o||(x.u||0)>(o.u||0)) m.set(k,x); });
+    return [...m.values()].sort(order); };
+  const base=(a.mod||0)>=(b.mod||0)?a:b;
+  return {...base,
+    history:un(a.history,b.history,x=>'h:'+x.start,(x,y)=>x.start-y.start),
+    sleep:un(a.sleep,b.sleep,x=>'s:'+x.bed,(x,y)=>x.wake-y.wake),
+    weight:un(a.weight,b.weight,x=>'w:'+dayKey(x.t),(x,y)=>x.t-y.t),
+    train:un(a.train,b.train,x=>'t:'+x.ex+x.t,(x,y)=>x.t-y.t),
+    deleted:dead, mod:Math.max(a.mod||0,b.mod||0)};
+}
+const setMsg=t=>{ $('syncMsg').textContent=t; };
+function renderSync(){
+  const on=!!(sync.token&&sync.gist);
+  $('syncSetup').hidden=on; $('syncOn').hidden=!on; $('syncGistShow').textContent=sync.gist||'';
+  $('syncGear').style.opacity=on?1:.6;
+}
+async function syncNow(manual){
+  if(!sync.token||!sync.gist||syncBusy) return;
+  syncBusy=true; if(manual) setMsg('Synchronisiere …');
+  try{
+    const r=await gh('/gists/'+sync.gist); if(!r.ok) throw new Error(r.status===401?'Token ungültig':r.status===404?'Gist nicht gefunden':'Fehler '+r.status);
+    const g=await r.json(), f=g.files&&g.files[GFILE];
+    let remote=null; if(f){ remote=JSON.parse(f.truncated?await (await fetch(f.raw_url)).text():f.content); }
+    const merged=remote?mergeDocs(state,remote):state;
+    const out=JSON.stringify(merged), changedLocal=out!==JSON.stringify(state);
+    if(changedLocal){ Object.assign(state,merged); saveLocal(); render(); renderSleep(); renderWeight(); renderTrain(); }
+    if(!remote||out!==JSON.stringify(remote)){
+      const p=await gh('/gists/'+sync.gist,{method:'PATCH',body:JSON.stringify({files:{[GFILE]:{content:out}}})});
+      if(!p.ok) throw new Error('Hochladen fehlgeschlagen ('+p.status+')');
+    }
+    sync.last=Date.now(); saveSync(); setMsg('Zuletzt synchronisiert: '+new Date(sync.last).toLocaleTimeString('de-DE'));
+  }catch(e){ setMsg('Sync fehlgeschlagen: '+(e.message||e)+(navigator.onLine?'':' (offline)')); }
+  syncBusy=false;
+}
+function scheduleSync(){ if(!sync.token||!sync.gist) return; clearTimeout(syncTimer); syncTimer=setTimeout(()=>syncNow(false),2500); }
+$('syncConnect').onclick=async()=>{
+  const token=$('syncToken').value.trim(), gist=$('syncGist').value.trim();
+  if(!token){ setMsg('Bitte ein Token eingeben.'); return; }
+  sync={token,gist}; setMsg('Verbinde …');
+  try{
+    if(!gist){
+      const r=await gh('/gists',{method:'POST',body:JSON.stringify({description:'Fastentracker Daten',public:false,files:{[GFILE]:{content:JSON.stringify(state)}}})});
+      if(!r.ok) throw new Error(r.status===401?'Token ungültig':r.status===403||r.status===404?'Token braucht die Berechtigung „gist“':'Fehler '+r.status);
+      sync.gist=(await r.json()).id;
+    }
+    saveSync(); $('syncToken').value=''; renderSync(); await syncNow(true);
+  }catch(e){ sync={}; saveSync(); renderSync(); setMsg('Verbinden fehlgeschlagen: '+(e.message||e)); }
+};
+$('syncNow').onclick=()=>syncNow(true);
+$('syncOff').onclick=()=>{ if(confirm('Synchronisierung auf diesem Gerät trennen? Das Token wird hier gelöscht, die Daten bleiben.')){ sync={}; saveSync(); renderSync(); setMsg(''); } };
+$('syncGear').onclick=()=>showTab('sync');
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') syncNow(false); });
+window.addEventListener('online',()=>syncNow(false));
 
 /* ---- Gewicht ---- */
 const dayKey = t => { const d=new Date(t); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; };
@@ -370,7 +453,7 @@ function renderWeight(){
   w.slice().reverse().slice(0,14).forEach(x=>{
     const r=document.createElement('div'); r.className='row';
     r.innerHTML=`<div>${new Date(x.t).toLocaleDateString('de-DE',{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric'})}</div><div><b>${x.kg.toFixed(1)} kg</b> <button class="del" aria-label="Löschen">✕</button></div>`;
-    r.querySelector('.del').onclick=()=>{ if(confirm('Eintrag löschen?')){ state.weight.splice(state.weight.indexOf(x),1); save(); renderWeight(); } };
+    r.querySelector('.del').onclick=()=>{ if(confirm('Eintrag löschen?')){ tomb('w:'+dayKey(x.t)); state.weight.splice(state.weight.indexOf(x),1); save(); renderWeight(); } };
     box.appendChild(r);
   });
 }
@@ -381,7 +464,7 @@ $('wSave').onclick=()=>{
   const t=new Date(d+'T12:00:00').getTime();
   if(!d||isNaN(t)||t>Date.now()+12*3600000){ alert('Bitte ein Datum nicht in der Zukunft wählen.'); return; }
   state.weight=state.weight.filter(x=>dayKey(x.t)!==d);
-  state.weight.push({t,kg:Math.round(kg*10)/10}); state.weight.sort((a,b)=>a.t-b.t);
+  state.weight.push({t,kg:Math.round(kg*10)/10,u:Date.now()}); state.weight.sort((a,b)=>a.t-b.t);
   save(); $('wKg').value=''; renderWeight();
 };
 renderWeight();
@@ -404,7 +487,7 @@ function renderTrain(){
   const sets=exSets(), today=dayKey(Date.now()), tl=$('trToday'); tl.innerHTML='';
   sets.filter(x=>dayKey(x.t)===today).forEach((x,i)=>{ const r=document.createElement('div'); r.className='row';
     r.innerHTML=`<div>Satz ${i+1}: <b>${x.reps} Wdh.</b>${kgTxt(x.kg)}</div><button class="del" aria-label="Löschen">✕</button>`;
-    r.querySelector('.del').onclick=()=>{ state.train.splice(state.train.indexOf(x),1); save(); renderTrain(); }; tl.appendChild(r); });
+    r.querySelector('.del').onclick=()=>{ tomb('t:'+x.ex+x.t); state.train.splice(state.train.indexOf(x),1); save(); renderTrain(); }; tl.appendChild(r); });
   const days=byDay(sets), best=topSet(sets);
   $('trStats').innerHTML=best?`<div><b>${best.reps}${kgTxt(best.kg).replace(' · ','<small> ')+(best.kg>0?'</small>':'')}</b><span class="sub">Bestes Set</span></div>
     <div><b>${days.length}</b><span class="sub">Trainingstage</span></div>
@@ -442,8 +525,9 @@ function showTab(t){
 }
 document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
 let startTab='fast'; try{ startTab=localStorage.getItem(KEY+'-tab')||'fast'; }catch{}
-showTab(['sleep','weight','train'].includes(startTab)?startTab:'fast');
+showTab(['sleep','weight','train','sync'].includes(startTab)?startTab:'fast');
 
+renderSync(); syncNow(false);
 setInterval(tick,1000);
 document.addEventListener('visibilitychange',tick);
 render();
