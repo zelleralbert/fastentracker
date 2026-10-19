@@ -48,6 +48,8 @@ export function renderTrain() {
     box.appendChild(b);
   }
   $('tReps').placeholder = e.unit;
+  // Kamen die Daten erst später (Abgleich, Import), das leere Feld mit dem Vorschlag füllen – aber nie beim Tippen
+  if (!$('tReps').value && document.activeElement !== $('tReps')) fillInputs();
   $('tHint').textContent = e.hint;
 
   const s = suggestNext(all, e);

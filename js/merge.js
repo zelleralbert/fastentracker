@@ -31,7 +31,8 @@ export function sanitize(d) {
   const current = rec(d.current) && num(d.current.start) && inRange(d.current.goalH, 1, 72)
     ? { start: d.current.start, goalH: d.current.goalH, notified: d.current.notified === true } : null;
   const deleted = {};
-  if (rec(d.deleted)) for (const [k, t] of Object.entries(d.deleted)) if (num(t)) deleted[k] = t;
+  // Schlüssel sortieren: sonst unterscheiden sich gleiche Stände nur in der Reihenfolge und werden endlos neu hochgeladen
+  if (rec(d.deleted)) for (const k of Object.keys(d.deleted).sort()) if (num(d.deleted[k])) deleted[k] = d.deleted[k];
 
   return {
     plan: typeof d.plan === 'string' && d.plan.length <= 12 ? d.plan : '16:8',

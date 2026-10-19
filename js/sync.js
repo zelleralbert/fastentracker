@@ -11,6 +11,8 @@ let timer = null, busy = false, again = false;
 const store = () => { try { localStorage.setItem(SYNC_KEY, JSON.stringify(sync)); } catch {} };
 const ready = () => !!(sync.token && sync.gist);
 const msg = t => { $('syncMsg').textContent = t; };
+// Schlägt der Abgleich fehl (z. B. Token abgelaufen), färbt sich das Einstellungs-Symbol – sonst bliebe der Fehler unbemerkt.
+const flag = () => $('gear').classList.toggle('alert', ready() && !!sync.err);
 const gh = (path, opts = {}) => fetch('https://api.github.com' + path, {
   cache: 'no-store', ...opts,
   headers: { Authorization: 'Bearer ' + sync.token, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
@@ -40,10 +42,12 @@ export async function syncNow(manual) {
       if (!p.ok) throw fail(p);
       if (files[SUMMARY]) sync.sumAt = Date.now();
     }
-    sync.last = Date.now(); store();
+    sync.last = Date.now(); delete sync.err; store(); flag();
     msg('Zuletzt synchronisiert: ' + hhmm(sync.last));
   } catch (e) {
     msg('Sync fehlgeschlagen: ' + (e.message || e) + (navigator.onLine ? '' : ' (offline)'));
+    // Offline ist kein Fehler, auf den man reagieren muss
+    if (navigator.onLine) { sync.err = String(e.message || e); store(); flag(); }
   } finally {
     busy = false;
     if (again) { again = false; syncNow(false); }
@@ -56,6 +60,7 @@ export function renderSettings() {
   $('syncSetup').hidden = ready();
   $('syncOn').hidden = !ready();
   $('syncGistShow').textContent = sync.gist || '';
+  flag();
   if (ready() && sync.last && !$('syncMsg').textContent) msg('Zuletzt synchronisiert: ' + fmtDate(sync.last));
   $('bkMsg').textContent = ui.exportAt ? 'Letzter Export: ' + fmtDate(ui.exportAt) : 'Noch kein Export.';
 }

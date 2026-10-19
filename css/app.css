@@ -26,6 +26,7 @@ section>*+*{margin-top:14px}
 svg.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 .icon-btn{background:none;border:0;color:var(--muted);padding:8px;margin-right:-8px;border-radius:12px;display:grid;place-items:center}
 .icon-btn.on{color:var(--text)}
+.icon-btn.alert{color:var(--warn)}
 
 /* Kopfbereich je Tab */
 .ring-wrap{position:relative;width:min(70vw,248px);margin:10px auto 0}

@@ -5,7 +5,7 @@ import { $, stats, items, lineChart } from './ui.js';
 const sign = v => (v > 0 ? '+' : v < 0 ? '−' : '±') + num(Math.abs(v));
 
 export function initWeight() {
-  $('wDate').value = dayKey(Date.now());
+  $('wDate').value = $('wDate').dataset.def = dayKey(Date.now());
   $('wSave').onclick = () => {
     const kg = parseFloat(String($('wKg').value).replace(',', '.')), d = $('wDate').value;
     if (!(kg >= 20 && kg <= 400)) return alert('Bitte ein Gewicht zwischen 20 und 400 kg eingeben.');
@@ -16,7 +16,7 @@ export function initWeight() {
     state.weight.push({ t, kg: Math.round(kg * 10) / 10, u: Date.now() });
     state.weight.sort((a, b) => a.t - b.t);
     save();
-    $('wKg').value = ''; $('wDate').value = dayKey(Date.now());
+    $('wKg').value = ''; $('wDate').value = $('wDate').dataset.def = dayKey(Date.now());
     renderWeight();
   };
 }
@@ -25,7 +25,10 @@ export function renderWeight() {
   // Bleibt die App über Mitternacht offen, soll das Eingabedatum nicht auf gestern stehen
   const today = dayKey(Date.now());
   $('wDate').max = today;
-  if (!$('wKg').value) $('wDate').value = today;
+  // Nur nachziehen, wenn der Nutzer das Datum nicht selbst geändert hat
+  const dEl = $('wDate');
+  if (dEl.value === (dEl.dataset.def || dEl.value)) dEl.value = today;
+  dEl.dataset.def = today;
   const w = state.weight.sort((a, b) => a.t - b.t), pts = w.map(x => ({ t: x.t, v: x.kg })), trend = movingAvg(pts);
   const last = w[w.length - 1];
   if (last) {

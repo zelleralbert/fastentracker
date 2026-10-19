@@ -1,6 +1,6 @@
 // Tests für Zusammenführung, Logik und Zusammenfassung. Laufen im Browser über test/index.html.
 import { mergeDocs, sanitize, dayKey } from '../js/merge.js';
-import { avgClock, movingAvg, suggestNext, isRecord, exById, buckets, rangeStart, D, H } from '../js/logic.js';
+import { avgClock, movingAvg, suggestNext, isRecord, exById, buckets, rangeStart, endOfDay, D, H } from '../js/logic.js';
 import { buildSummary } from '../js/summary.js';
 
 const results = [];
@@ -160,6 +160,64 @@ test('alte Stände ohne deleted/Listen funktionieren', () => {
   eq(m.train.length, 1); eq(m.history, []); eq(m.deleted, {});
 });
 
+/* ---- Zwei Geräte, zufällige Bedienung ---- */
+// Simuliert zwei Geräte mit einem gemeinsamen Gist: zufällige Eingaben, Löschungen und Abgleiche in beliebiger Reihenfolge.
+function simulate(seed) {
+  let q = seed; const rnd = () => (q = (q * 1664525 + 1013904223) % 4294967296) / 4294967296;
+  const pick = a => a[Math.floor(rnd() * a.length)];
+  let clock = T(1, 8);
+  const tick = () => { clock += 60000 + Math.floor(rnd() * 3 * H); return clock; };
+  const dev = [sanitize({}), sanitize({})];
+  let remote = null;
+  const added = { train: new Set(), sleep: new Set(), history: new Set() }, removed = new Set();
+  const del = (d, key) => { d.deleted[key] = clock; removed.add(key); };
+
+  const ops = [
+    d => { const x = { t: clock, ex: pick(['chin', 'dips', 'neck']), reps: 5 + Math.floor(rnd() * 10), kg: 0 }; d.train.push(x); added.train.add('t:' + x.ex + x.t); },
+    d => { if (!d.train.length) return false; const x = pick(d.train); del(d, 't:' + x.ex + x.t); d.train.splice(d.train.indexOf(x), 1); },
+    d => { const day = T(1 + Math.floor(rnd() * 5)); const k = dayKey(day); d.weight = d.weight.filter(x => dayKey(x.t) !== k); d.weight.push({ t: day, kg: 80 + Math.floor(rnd() * 50) / 10, u: clock }); },
+    d => { if (!d.weight.length) return false; const x = pick(d.weight); del(d, 'w:' + dayKey(x.t)); d.weight.splice(d.weight.indexOf(x), 1); },
+    d => { if (d.current) return false; d.current = { start: clock, goalH: 16, notified: false }; },
+    d => { if (!d.current) return false; const h = { start: d.current.start, end: clock, goalH: 16, reached: false }; d.history.push(h); added.history.add('h:' + h.start); d.current = null; },
+    d => { if (d.sleepNow) return false; d.sleepNow = clock; },
+    d => { if (d.sleepNow == null || clock - d.sleepNow < 11 * 60000) return false; const x = { bed: d.sleepNow, wake: clock }; d.sleep.push(x); added.sleep.add('s:' + x.bed); d.sleepNow = null; },
+    d => { if (d.sleepNow == null) return false; del(d, 's:' + d.sleepNow); d.sleepNow = null; },
+    d => { d.plan = pick(['16:8', '18:6', '12:12']); },
+  ];
+  const sync = i => { const m = remote ? mergeDocs(dev[i], remote) : sanitize(dev[i]); dev[i] = m; remote = m; };
+
+  for (let step = 0; step < 60; step++) {
+    const i = rnd() < 0.5 ? 0 : 1;
+    if (rnd() < 0.3) { sync(i); continue; }
+    tick();
+    if (pick(ops)(dev[i]) !== false) dev[i].mod = clock;
+  }
+  // Alle Geräte laden zum Schluss ihren Stand und gleichen ab
+  for (const i of [0, 1, 0, 1]) sync(i);
+  return { dev, remote, added, removed, again: [mergeDocs(dev[0], remote), mergeDocs(dev[1], remote)] };
+}
+
+test('zwei Geräte, 300 zufällige Abläufe: beide landen beim selben Stand und bleiben stabil', () => {
+  for (let seed = 1; seed <= 300; seed++) {
+    const r = simulate(seed);
+    const diff = Object.keys(r.dev[0]).filter(k => JSON.stringify(r.dev[0][k]) !== JSON.stringify(r.dev[1][k]));
+    ok(!diff.length, `Seed ${seed}: Geräte verschieden in ${diff.join(', ')}: ${diff.map(k => JSON.stringify(r.dev[0][k]) + ' vs ' + JSON.stringify(r.dev[1][k])).join(' | ').slice(0, 300)}`);
+    eq(r.dev[0], r.remote, `Seed ${seed}: Gist verschieden –`);
+    eq(r.again[0], r.dev[0], `Seed ${seed}: weiterer Abgleich ändert etwas –`);
+  }
+});
+
+test('zwei Geräte: keine Einträge gehen verloren und gelöschte kommen nicht zurück', () => {
+  for (let seed = 1; seed <= 300; seed++) {
+    const { remote, added, removed } = simulate(seed);
+    const present = new Set([...remote.train.map(x => 't:' + x.ex + x.t), ...remote.sleep.map(x => 's:' + x.bed), ...remote.history.map(x => 'h:' + x.start)]);
+    for (const set of Object.values(added)) for (const k of set) {
+      if (removed.has(k)) ok(!present.has(k), `Seed ${seed}: gelöschter Eintrag ${k} ist zurück`);
+      else ok(present.has(k), `Seed ${seed}: Eintrag ${k} ging verloren`);
+    }
+  }
+});
+
 /* ---- Logik ---- */
 test('mittlere Uhrzeit über Mitternacht', () => {
   eq(avgClock([T(1, 23, 30), T(2, 0, 30)]), '00:00');
@@ -208,7 +266,6 @@ const contiguous = (list, from, to) => {
   eq(list[0].from, from, 'Beginn:'); eq(list[list.length - 1].to, to, 'Ende:');
   for (let i = 1; i < list.length; i++) eq(list[i].from, list[i - 1].to, `Lücke bei ${i}:`);
 };
-const endOfDay = t => { const d = new Date(t); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + 1); return d.getTime(); };
 
 test('7 und 30 Tage: ein Balken pro Tag, lückenlos', () => {
   const now = T(20, 15);
@@ -224,6 +281,19 @@ test('1 Jahr: monatlich, lückenlos, Monatsnamen', () => {
   const now = T(20, 15), b = buckets(now, 365);
   eq(b.list.length, 13); contiguous(b.list, rangeStart(now, 365), endOfDay(now));
   eq(b.list[b.list.length - 1].label, 'Okt');
+});
+
+test('Zeiträume bleiben über das ganze Jahr lückenlos (auch an Sommer-/Winterzeit-Wechseln)', () => {
+  for (let day = 0; day < 400; day += 3) {
+    const now = new Date(2026, 0, 1 + day, 3 + (day % 5) * 4, 30).getTime();
+    for (const n of [7, 30, 90, 365]) {
+      const b = buckets(now, n);
+      eq(b.list[0].from, rangeStart(now, n), `Beginn bei Tag ${day}/${n}:`);
+      eq(b.list[b.list.length - 1].to, endOfDay(now), `Ende bei Tag ${day}/${n}:`);
+      for (let i = 1; i < b.list.length; i++) eq(b.list[i].from, b.list[i - 1].to, `Lücke bei Tag ${day}/${n}/${i}:`);
+      ok(b.list.every(x => x.to > x.from), `leerer Abschnitt bei Tag ${day}/${n}`);
+    }
+  }
 });
 
 /* ---- Zusammenfassung ---- */
