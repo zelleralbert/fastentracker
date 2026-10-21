@@ -3,6 +3,7 @@ import { mergeDocs, sanitize, dayKey } from '../js/merge.js';
 import { avgClock, movingAvg, suggestNext, isRecord, exById, buckets, rangeStart, endOfDay, D, H } from '../js/logic.js';
 import { buildSummary } from '../js/summary.js';
 import { analyzeDrift, mainSleeps } from '../js/drift.js';
+import { lineChart } from '../js/ui.js';
 
 const results = [];
 function test(name, fn) {
@@ -475,6 +476,19 @@ test('Non-24: Genauigkeit über viele zufällige Verläufe (±2 h Streuung, 20 %
   }
   const good = stats.filter(e => e <= 0.15).length / stats.length;
   ok(good >= 0.97, `nur ${(good * 100).toFixed(0)} % innerhalb von 0,15 h`);
+});
+
+test('Diagramm: Messpunkte liegen genau auf ihrer Verbindungslinie, der Trend ist eine eigene Linie', () => {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  const raw = [84.6, 85.4, 84.1, 85.0, 83.9, 84.4].map((v, i) => ({ t: T(10 + i), v }));
+  const trend = movingAvg(raw);
+  lineChart(svg, { from: T(10), to: T(17), unit: 'kg', series: [{ pts: raw, line: true, dots: true, faint: true }, { pts: trend, line: true }] });
+  const lines = [...svg.querySelectorAll('polyline')], dots = [...svg.querySelectorAll('circle')];
+  eq(lines.length, 2, 'Linien:'); eq(dots.length, raw.length, 'Punkte:');
+  const verts = lines[0].getAttribute('points').split(' ');
+  dots.forEach((c, i) => eq(`${c.getAttribute('cx')},${c.getAttribute('cy')}`, verts[i], `Punkt ${i}:`));
+  ok(lines[0].classList.contains('faint') && !lines[1].classList.contains('faint'), 'Messlinie dünn, Trend kräftig');
+  ok(lines[1].getAttribute('points') !== lines[0].getAttribute('points'), 'Trend weicht von den Messwerten ab');
 });
 
 /* ---- Zusammenfassung ---- */

@@ -84,6 +84,7 @@ svg.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.7;stro
 .chart .grid{stroke:var(--line);stroke-width:1}
 .chart .lbl{fill:var(--faint);font-size:9px}
 .chart .line{fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.chart .line.faint{stroke:var(--faint);stroke-width:1}
 .chart .dot{fill:var(--accent)}
 .chart .dot.faint{fill:var(--faint)}
 .legend{display:flex;justify-content:center;gap:14px;font-size:.75rem;color:var(--muted)}

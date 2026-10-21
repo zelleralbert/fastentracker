@@ -45,7 +45,7 @@ export function renderWeight() {
     [tl && base && (before || tIn.length > 1) ? sign(tl.v - base.v) : '–', `seit ${rangeLabel(n)} (kg)`],
     [inR.length ? `${num(Math.min(...inR.map(p => p.v)))}–${num(Math.max(...inR.map(p => p.v)))}` : '–', 'Spanne (kg)'],
   ]);
-  const shown = inR.length > 1 && lineChart($('wChart'), { from, to: endOfDay(Date.now()), unit: 'kg', series: [{ pts: inR, dots: true, faint: true }, { pts: tIn, line: true }] });
+  const shown = inR.length > 1 && lineChart($('wChart'), { from, to: endOfDay(Date.now()), unit: 'kg', series: [{ pts: inR, line: true, dots: true, faint: true }, { pts: tIn, line: true }] });
   if (!shown) $('wChart').setAttribute('hidden', '');
   $('wLegend').hidden = !shown;
 

@@ -50,13 +50,14 @@ export function lineChart(svg, { from, to, series, unit = '', digits = 1 }) {
   if (all.length < 2) { svg.setAttribute('hidden', ''); return false; }
   let mn = Math.min(...all.map(p => p.v)), mx = Math.max(...all.map(p => p.v));
   if (mx - mn < 1) { mn -= .5; mx += .5; }
-  const W = 320, X = t => 6 + Math.min(1, Math.max(0, (t - from) / (to - from || 1))) * (W - 12), Y = v => 118 - (v - mn) / (mx - mn) * 96;
-  let out = `<line class="grid" x1="0" x2="${W}" y1="22" y2="22"/><line class="grid" x1="0" x2="${W}" y1="118" y2="118"/>`
-    + `<text class="lbl" x="${W}" y="16" text-anchor="end">${num(mx, digits)} ${unit}</text>`
-    + `<text class="lbl" x="${W}" y="112" text-anchor="end">${num(mn, digits)} ${unit}</text>`
-    + `<text class="lbl" x="0" y="134">${fmtShort(from)}</text><text class="lbl" x="${W}" y="134" text-anchor="end">${fmtShort(to - 1)}</text>`;
+  // Beschriftung der Achse links in einem eigenen Streifen, damit sie keine Messpunkte überdeckt
+  const W = 320, X0 = 44, X = t => X0 + Math.min(1, Math.max(0, (t - from) / (to - from || 1))) * (W - X0 - 6), Y = v => 118 - (v - mn) / (mx - mn) * 96;
+  let out = `<line class="grid" x1="${X0}" x2="${W}" y1="22" y2="22"/><line class="grid" x1="${X0}" x2="${W}" y1="118" y2="118"/>`
+    + `<text class="lbl" x="${X0 - 5}" y="25" text-anchor="end">${num(mx, digits)} ${unit}</text>`
+    + `<text class="lbl" x="${X0 - 5}" y="121" text-anchor="end">${num(mn, digits)} ${unit}</text>`
+    + `<text class="lbl" x="${X0}" y="134">${fmtShort(from)}</text><text class="lbl" x="${W}" y="134" text-anchor="end">${fmtShort(to - 1)}</text>`;
   for (const s of series) {
-    if (s.line && s.pts.length > 1) out += `<polyline class="line" points="${s.pts.map(p => X(p.t).toFixed(1) + ',' + Y(p.v).toFixed(1)).join(' ')}"/>`;
+    if (s.line && s.pts.length > 1) out += `<polyline class="line${s.faint ? ' faint' : ''}" points="${s.pts.map(p => X(p.t).toFixed(1) + ',' + Y(p.v).toFixed(1)).join(' ')}"/>`;
     if (s.dots) out += s.pts.map(p => `<circle class="dot${s.faint ? ' faint' : ''}" cx="${X(p.t).toFixed(1)}" cy="${Y(p.v).toFixed(1)}" r="${s.faint ? 2.2 : 2.8}"/>`).join('');
   }
   svg.innerHTML = out;
