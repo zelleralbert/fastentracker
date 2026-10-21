@@ -1,6 +1,7 @@
 import { state, save, tomb, range } from './store.js';
-import { H, fmtHM, fmtDay, hhmm, avg, avgClock, rangeStart, buckets } from './logic.js';
-import { $, stats, items, bars } from './ui.js';
+import { H, num, plural, fmtHM, fmtDay, hhmm, avg, avgClock, rangeStart, buckets, lastDays } from './logic.js';
+import { $, stats, items, bars, actogram } from './ui.js';
+import { analyzeDrift } from './drift.js';
 
 const toLocalInput = t => new Date(t - new Date(t).getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 
@@ -56,7 +57,39 @@ export function renderSleep() {
     confirmText: 'Nacht löschen?',
     onDel: () => { tomb('s:' + x.bed); s.splice(s.indexOf(x), 1); save(); renderSleep(); },
   })), 'Noch keine Nächte erfasst.');
+  renderDrift();
   tickSleep();
+}
+
+// Schlafverschiebung (Non-24): Zykluslänge, tägliche Verschiebung, Vorhersage und Aktogramm
+function renderDrift() {
+  const now = Date.now(), days = Math.max(range(), 14);
+  const r = analyzeDrift(state.sleep, { now, days });
+  const hide = () => { $('sNext').hidden = true; $('sActoLeg').hidden = true; $('sActo').setAttribute('hidden', ''); };
+  if (!r.ok) {
+    stats($('sDrift'), []);
+    $('sDriftNote').textContent = r.reason + '. Trage deine Nächte ein, dann wird die Verschiebung berechnet.';
+    return hide();
+  }
+  const d = Math.round(r.driftMin), sgn = d > 0 ? '+' : d < 0 ? '−' : '±';
+  stats($('sDrift'), [
+    [`${sgn}${Math.abs(d)} min`, r.kind === 'stabil' ? 'pro Tag (stabil)' : `pro Tag ${r.kind}`],
+    [`${num(r.periodH, 2)} h`, 'Zykluslänge'],
+    [r.rotationDays ? `≈ ${Math.round(r.rotationDays)} T` : '–', 'bis zur vollen Runde'],
+  ]);
+  const win = n => `${fmtDay(n.bed)}, ${hhmm(n.bed)} – ${hhmm(n.wake)}`;
+  $('sNext').hidden = !r.next.length;
+  if (r.next.length) $('sNext').innerHTML = `Nächster Schlaf voraussichtlich <b>${win(r.next[0])}</b>` + (r.next[1] ? `<br>danach ${win(r.next[1])}` : '');
+  $('sDriftNote').textContent = `Schätzung aus ${plural(r.n, 'Nacht', 'Nächten')} der letzten ${days} Tage · Streuung ±${Math.round(r.spreadMin)} min. Keine ärztliche Diagnose.`;
+
+  // Aktogramm: letzte Tage plus fünf erwartete
+  const nPast = Math.min(days, 60), future = 5, nRows = nPast + future;
+  const starts = lastDays(now, nPast);
+  for (let i = 1; i <= future + 2; i++) { const t = new Date(starts[nPast - 1]); t.setDate(t.getDate() + i); starts.push(t.getTime()); }
+  const sleeps = state.sleep.filter(x => x.wake > starts[0]);
+  if (state.sleepNow) sleeps.push({ bed: state.sleepNow, wake: now });
+  actogram($('sActo'), { starts, nRows, todayIdx: nPast - 1, sleeps, predicted: r.next });
+  $('sActoLeg').hidden = false;
 }
 
 export function tickSleep() {

@@ -1,8 +1,8 @@
 // Bei jeder Veröffentlichung VERSION erhöhen, damit Geräte die neuen Dateien laden.
-const VERSION = 'tagwerk-2.6';
+const VERSION = 'tagwerk-2.7';
 const FILES = [
   './', './index.html', './manifest.json', './icon.svg', './css/app.css',
-  './js/app.js', './js/store.js', './js/ui.js', './js/merge.js', './js/logic.js', './js/summary.js',
+  './js/app.js', './js/store.js', './js/ui.js', './js/merge.js', './js/logic.js', './js/summary.js', './js/drift.js',
   './js/fast.js', './js/sleep.js', './js/train.js', './js/weight.js', './js/sync.js',
 ];
 

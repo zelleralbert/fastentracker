@@ -8,6 +8,7 @@ Minimalistische PWA für Fasten, Schlaf, Training und Gewicht. Läuft ohne Build
 |---|---|
 | `js/merge.js` | Zusammenführen zweier Datenstände (Geräte-Sync, Import) |
 | `js/logic.js` | Formatierung, Statistik, Übungen, Progressionsvorschläge |
+| `js/drift.js` | Schlafverschiebung (Non-24): Zykluslänge, Drift pro Tag, Vorhersage |
 | `js/summary.js` | Markdown-Zusammenfassung für Claude (`zusammenfassung.md` im Gist) |
 | `js/store.js` | Datenstand im Browser, Speichern, Lösch-Markierungen |
 | `js/sync.js` | Sync über geheimes GitHub-Gist, Export/Import |

@@ -63,3 +63,30 @@ export function lineChart(svg, { from, to, series, unit = '', digits = 1 }) {
   svg.removeAttribute('hidden');
   return true;
 }
+
+// Aktogramm (doppelt aufgetragen): jede Zeile zeigt zwei aufeinanderfolgende Tage (0–48 Uhr), neuere Tage unten.
+// Eine Verschiebung des Schlafs erscheint als Schräge. rows: Tagesanfänge (n + 2 Einträge), sleeps/predicted: {bed, wake}
+export function actogram(svg, { starts, nRows, todayIdx, sleeps, predicted = [] }) {
+  const rowH = Math.min(11, Math.max(3, Math.floor(230 / nRows))), X0 = 30, W = 320 - X0 - 4, top = 14, H = top + nRows * rowH + 4;
+  const x = (t, S, E) => X0 + Math.min(1, Math.max(0, (t - S) / (E - S))) * W;
+  let out = `<rect class="today" x="0" y="${top + todayIdx * rowH}" width="320" height="${rowH}"/>`;
+  for (const [i, lbl] of [[0, '00'], [12, '12'], [24, '00'], [36, '12'], [48, '00']]) {
+    const gx = (X0 + i / 48 * W).toFixed(1);
+    out += `<line class="grid" x1="${gx}" x2="${gx}" y1="${top - 3}" y2="${H - 4}"/><text class="lbl" x="${gx}" y="9" text-anchor="middle">${lbl}</text>`;
+  }
+  for (let i = 0; i < nRows; i++) {
+    const S = starts[i], E = starts[i + 2], y = top + i * rowH;
+    const bar = (b, cls) => {
+      if (b.wake <= S || b.bed >= E) return '';
+      const x1 = x(b.bed, S, E), x2 = x(b.wake, S, E);
+      return `<rect class="${cls}" x="${x1.toFixed(1)}" y="${y + .5}" width="${Math.max(1, x2 - x1).toFixed(1)}" height="${Math.max(1, rowH - 1)}" rx="1"/>`;
+    };
+    for (const b of predicted) out += bar(b, 'pr');
+    for (const b of sleeps) out += bar(b, 'sl');
+    if (i === todayIdx) out += `<text class="lbl b" x="${X0 - 4}" y="${y + rowH - 1}" text-anchor="end">heute</text>`;
+    else if ((todayIdx - i) % 7 === 0 && i < todayIdx) out += `<text class="lbl" x="${X0 - 4}" y="${y + rowH - 1}" text-anchor="end">${fmtShort(starts[i])}</text>`;
+  }
+  svg.setAttribute('viewBox', `0 0 320 ${H}`);
+  svg.innerHTML = out;
+  svg.removeAttribute('hidden');
+}

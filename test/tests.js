@@ -2,6 +2,7 @@
 import { mergeDocs, sanitize, dayKey } from '../js/merge.js';
 import { avgClock, movingAvg, suggestNext, isRecord, exById, buckets, rangeStart, endOfDay, D, H } from '../js/logic.js';
 import { buildSummary } from '../js/summary.js';
+import { analyzeDrift, mainSleeps } from '../js/drift.js';
 
 const results = [];
 function test(name, fn) {
@@ -342,6 +343,109 @@ test('Zusammenfassung: Einzahl, Jahreszahl und Einzeiligkeit der Notizen', () =>
   ok(md.includes('1 Messung,') && !md.includes('1 Messungen'), 'Messung');
   ok(md.includes('Letzte 12 Monate (20.10.2025 – 19.10.2026)'), 'Jahreszahl: ' + md.split('\n').find(l => l.includes('12 Monate')));
   ok(md.includes('Chin-ups: a b'), 'Notiz einzeilig');
+  ok(md.includes('## Schlafverschiebung (Non-24, letzte 28 Tage)'), 'Abschnitt Schlafverschiebung');
+});
+
+/* ---- Schlafverschiebung (Non-24) ---- */
+// Synthetische Nächte mit bekannter Zykluslänge: Mitte(k) = start + k·τ, dazu optional Rauschen, fehlende Nächte, Nickerchen
+function nights({ n, tauH, durH = 8, noiseMin = 0, skip = [], naps = 0, seed = 7, start = Date.UTC(2026, 8, 1, 6, 0) }) {
+  let q = seed; const rnd = () => (q = (q * 1664525 + 1013904223) % 4294967296) / 4294967296;
+  const out = [];
+  for (let k = 0; k < n; k++) {
+    const mid = start + k * tauH * H + (rnd() * 2 - 1) * noiseMin * 60000;
+    if (!skip.includes(k)) out.push({ bed: mid - durH * H / 2, wake: mid + durH * H / 2 });
+    if (naps && k % naps === 0) out.push({ bed: mid + 12 * H, wake: mid + 13.5 * H });   // 1,5-h-Nickerchen
+  }
+  return out;
+}
+const lastWake = a => Math.max(...a.map(x => x.wake));
+
+test('Non-24: exakte Zykluslänge 24,75 h wird erkannt (Verschiebung, Umlauf, Vorhersage)', () => {
+  const sl = nights({ n: 24, tauH: 24.75 }), now = lastWake(sl) + 2 * H;
+  const r = analyzeDrift(sl, { now, days: 40 });
+  ok(r.ok, r.reason);
+  ok(Math.abs(r.periodH - 24.75) < 0.001, 'Zyklus ' + r.periodH);
+  ok(Math.abs(r.driftMin - 45) < 0.1, 'Drift ' + r.driftMin);
+  ok(Math.abs(r.rotationDays - 32) < 0.1, 'Umlauf ' + r.rotationDays);
+  eq(r.kind, 'später');
+  // nächste Mitte genau eine Zykluslänge nach der letzten
+  const lastMid = sl[sl.length - 1].bed + 4 * H;
+  ok(Math.abs(r.next[0].mid - (lastMid + 24.75 * H)) < 1000, 'Vorhersage');
+  eq(r.next.length, 7);
+});
+
+test('Non-24: Rauschen, fehlende Nächte und Nickerchen verfälschen die Zykluslänge kaum', () => {
+  const sl = nights({ n: 40, tauH: 24.6, noiseMin: 45, skip: [5, 6, 17, 18, 19, 30], naps: 3 }), now = lastWake(sl) + H;
+  const r = analyzeDrift(sl, { now, days: 60 });
+  ok(r.ok, r.reason);
+  ok(Math.abs(r.periodH - 24.6) < 0.06, 'Zyklus ' + r.periodH.toFixed(3));
+  ok(r.spreadMin > 10 && r.spreadMin < 70, 'Streuung ' + r.spreadMin.toFixed(0));
+  eq(r.n, 34);
+});
+
+test('Non-24: kurzer Zyklus (23,6 h) ergibt eine Verschiebung nach früher', () => {
+  const r = analyzeDrift(nights({ n: 20, tauH: 23.6, noiseMin: 20 }), { now: Date.UTC(2026, 9, 1), days: 60 });
+  ok(r.ok, r.reason); eq(r.kind, 'früher'); ok(r.driftMin < -20 && r.driftMin > -28, 'Drift ' + r.driftMin);
+});
+
+test('Non-24: stabiler 24-h-Rhythmus wird als stabil gemeldet', () => {
+  const r = analyzeDrift(nights({ n: 28, tauH: 24.0, noiseMin: 40, seed: 3 }), { now: Date.UTC(2026, 9, 1), days: 60 });
+  ok(r.ok, r.reason); eq(r.kind, 'stabil'); ok(Math.abs(r.driftMin) < 10, 'Drift ' + r.driftMin);
+});
+
+test('Non-24: ein einzelner falscher Eintrag (18 h Schlaf) ändert das Ergebnis kaum', () => {
+  const sl = nights({ n: 30, tauH: 24.7, noiseMin: 15 });
+  sl[12] = { bed: sl[12].bed, wake: sl[12].bed + 18 * H };
+  const r = analyzeDrift(sl, { now: lastWake(sl) + H, days: 60 });
+  ok(Math.abs(r.periodH - 24.7) < 0.05, 'Zyklus ' + r.periodH.toFixed(3));
+});
+
+test('Non-24: lange Lücken (vier Tage nicht eingetragen) werden über die Zykluszahl überbrückt', () => {
+  const sl = nights({ n: 30, tauH: 24.8, noiseMin: 10, skip: [10, 11, 12, 13] });
+  const r = analyzeDrift(sl, { now: lastWake(sl) + H, days: 60 });
+  ok(Math.abs(r.periodH - 24.8) < 0.03, 'Zyklus ' + r.periodH.toFixed(3));
+});
+
+test('Non-24: geteilter Schlaf wird zusammengefasst, Nickerchen zählen nicht als Nacht', () => {
+  const day = Date.UTC(2026, 8, 1);
+  const eps = mainSleeps([
+    { bed: day + 1 * H, wake: day + 4 * H }, { bed: day + 5 * H, wake: day + 9 * H },      // 1 h Pause → eine Nacht (8 h)
+    { bed: day + 14 * H, wake: day + 15 * H },                                           // 1-h-Nickerchen → verworfen
+    { bed: day + 25 * H, wake: day + 33 * H },
+  ]);
+  eq(eps.length, 2); eq([eps[0].bed, eps[0].wake], [day + 1 * H, day + 9 * H]);
+});
+
+test('Non-24: zu wenig Daten liefern keine Schätzung, sondern einen Hinweis', () => {
+  const r = analyzeDrift(nights({ n: 3, tauH: 24.7 }), { now: Date.UTC(2026, 9, 1), days: 60 });
+  eq(r.ok, false); ok(r.reason.includes('Nächte'), r.reason);
+  eq(analyzeDrift([], {}).ok, false);
+});
+
+test('Non-24: Sommerzeitwechsel (Ende Oktober) verändert die Schätzung nicht', () => {
+  // Nächte 24,5 h Abstand quer über die Zeitumstellung 25.10.2026
+  const sl = nights({ n: 30, tauH: 24.5, start: Date.UTC(2026, 9, 15, 3, 0) });
+  const r = analyzeDrift(sl, { now: lastWake(sl) + H, days: 60 });
+  ok(Math.abs(r.periodH - 24.5) < 0.001, 'Zyklus ' + r.periodH);
+});
+
+test('Non-24: Genauigkeit über viele zufällige Verläufe (±2 h Streuung, 20 % fehlende Nächte, lange Nickerchen)', () => {
+  const stats = [];
+  for (let seed = 1; seed <= 120; seed++) {
+    let q = seed * 2654435761 % 4294967296; const rnd = () => (q = (q * 1664525 + 1013904223) % 4294967296) / 4294967296;
+    const nrm = () => { let u = 0; for (let i = 0; i < 6; i++) u += rnd(); return (u - 3) / Math.sqrt(0.5); };
+    const tauH = 24.2 + rnd() * 1.0, out = [];
+    for (let k = 0; k < 35; k++) {
+      if (rnd() < 0.2) continue;
+      const mid = Date.UTC(2026, 8, 1, 6) + k * tauH * H + nrm() * 100 * 60000, dur = Math.max(4, 8 + nrm() * 1.3) * H;
+      out.push({ bed: mid - dur / 2, wake: mid + dur / 2 });
+      if (rnd() < 0.3) { const b = mid + 11 * H + rnd() * 3 * H; out.push({ bed: b, wake: b + (1 + rnd() * 4) * H }); }
+    }
+    const r = analyzeDrift(out, { now: Math.max(...out.map(x => x.wake)) + H, days: 60 });
+    stats.push(r.ok ? Math.abs(r.periodH - tauH) : 99);
+  }
+  const good = stats.filter(e => e <= 0.15).length / stats.length;
+  ok(good >= 0.97, `nur ${(good * 100).toFixed(0)} % innerhalb von 0,15 h`);
 });
 
 /* ---- Zusammenfassung ---- */

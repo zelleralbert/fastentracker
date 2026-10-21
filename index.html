@@ -58,6 +58,13 @@
     <div class="stats" id="sStats"></div>
     <div class="bars" id="sBars"></div>
     <div class="legend"><span><i style="background:var(--accent)"></i>ab 7 h</span><span><i style="background:var(--warn)"></i>unter 7 h</span></div>
+
+    <div class="head"><h2>Schlafverschiebung</h2></div>
+    <div class="stats" id="sDrift"></div>
+    <div class="suggest" id="sNext" hidden></div>
+    <svg class="chart acto" id="sActo" viewBox="0 0 320 200" role="img" aria-label="Aktogramm: Schlafzeiten pro Tag, Zeilen sind aufeinanderfolgende Tage, rechts die erwarteten Schlaffenster" hidden></svg>
+    <div class="legend" id="sActoLeg" hidden><span><i style="background:var(--accent)"></i>geschlafen</span><span><i class="pr"></i>erwartet</span></div>
+    <p class="fine center" id="sDriftNote"></p>
     <details><summary>Verlauf</summary><div id="sList"></div></details>
   </section>
 

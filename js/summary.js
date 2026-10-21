@@ -1,5 +1,6 @@
 // Kompakte Markdown-Zusammenfassung, die beim Sync als zusammenfassung.md ins Gist geschrieben wird (für Claude).
-import { H, rangeTitle, plural, num, kgNum, fmtDate, fmtShort, fmtFull, fmtHM, avg, avgClock, movingAvg, rangeStart, EXS, topSet, byDay } from './logic.js';
+import { analyzeDrift } from './drift.js';
+import { H, rangeTitle, plural, num, kgNum, fmtDate, fmtShort, fmtFull, fmtHM, hhmm, avg, avgClock, movingAvg, rangeStart, EXS, topSet, byDay } from './logic.js';
 
 const sign = v => (v > 0 ? '+' : v < 0 ? '−' : '±') + num(Math.abs(v));
 
@@ -50,12 +51,26 @@ function block(s, now, days, withNotes) {
   return L;
 }
 
+// Schlafverschiebung (Non-24) der letzten 28 Tage
+function driftBlock(s, now) {
+  const r = analyzeDrift(s.sleep || [], { now, days: 28 });
+  const L = ['## Schlafverschiebung (Non-24, letzte 28 Tage)', ''];
+  if (!r.ok) return [...L, `- ${r.reason}`, ''];
+  const d = Math.round(r.driftMin);
+  L.push(`- **Verschiebung:** ${d > 0 ? '+' : d < 0 ? '−' : '±'}${Math.abs(d)} min pro Tag (${r.kind === 'stabil' ? 'stabil, 24-h-Rhythmus' : 'Schlaf wandert ' + r.kind}), Zykluslänge ${num(r.periodH, 2)} h`);
+  if (r.rotationDays) L.push(`- **Volle Runde um die Uhr:** etwa alle ${Math.round(r.rotationDays)} Tage`);
+  L.push(`- **Grundlage:** ${plural(r.n, 'Nacht', 'Nächte')} über ${Math.round(r.spanDays)} Tage, Streuung ±${Math.round(r.spreadMin)} min, typische Schlafdauer ${fmtHM(r.medianDur)} h`);
+  if (r.next.length) L.push(`- **Erwarteter Schlaf:** ${r.next.slice(0, 3).map(n => `${fmtDate(n.bed)} – ${hhmm(n.wake)}`).join('; ')}`);
+  return [...L, ''];
+}
+
 export function buildSummary(s, now = Date.now()) {
   const L = ['# Tagwerk – Zusammenfassung', '', `Stand: ${fmtDate(now)}`, ''];
   if (s.current) L.push(`- **Fasten läuft** seit ${fmtDate(s.current.start)}: ${num((now - s.current.start) / H)} h von ${s.current.goalH} h`);
   if (s.sleepNow) L.push(`- **Schläft** seit ${fmtDate(s.sleepNow)}`);
   if (s.current || s.sleepNow) L.push('');
   L.push(...block(s, now, 7, true), ...block(s, now, 30, false), ...block(s, now, 365, false));
+  L.push(...driftBlock(s, now));
   L.push('---', 'Rohdaten: fastentracker.json · Zeiten als Unix-ms · Training: `reps` = Wiederholungen, bei Neck Bridge Sekunden; `kg` = Zusatzgewicht; `n` = Notiz');
   return L.join('\n') + '\n';
 }
