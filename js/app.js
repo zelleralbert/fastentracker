@@ -2,12 +2,12 @@ import { on, ui, saveUi, range } from './store.js';
 import { $ } from './ui.js';
 import { RANGES, rangeLabel, dayKey } from './logic.js';
 import { initFast, renderFast, tickFast } from './fast.js';
-import { initSleep, renderSleep, tickSleep } from './sleep.js';
+import { initSleep, renderSleep, renderDrift, tickSleep } from './sleep.js';
 import { initTrain, renderTrain } from './train.js';
 import { initWeight, renderWeight } from './weight.js';
 import { initSync, renderSettings } from './sync.js';
 
-const VERSION = '2.7';
+const VERSION = '2.8';
 const TITLES = { fast: 'Fasten', sleep: 'Schlaf', train: 'Training', weight: 'Gewicht', settings: 'Einstellungen' };
 
 // Jeder Bereich wird einzeln abgesichert: ein Fehler in einem darf die übrigen nicht blockieren.
@@ -55,11 +55,13 @@ showTab(ui.tab || legacyTab || 'fast');
 initSync();
 
 // Über Mitternacht offen gelassen: „heute“, Zeiträume und Diagramme neu berechnen
-let shownDay = dayKey(Date.now());
+let shownDay = dayKey(Date.now()), ticks = 0;
 setInterval(() => {
   tickFast(); tickSleep();
   const d = dayKey(Date.now());
   if (d !== shownDay) { shownDay = d; renderAll(); }
+  // „Nächster Schlaf“ und „Jetzt erwartet“ veralten, wenn die App stundenlang offen bleibt: alle 5 Minuten auffrischen
+  else if (++ticks % 300 === 0) { try { renderDrift(); } catch (e) { console.error('renderDrift', e); } }
 }, 1000);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') renderAll(); });
 

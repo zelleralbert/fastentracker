@@ -62,7 +62,7 @@ export function renderSleep() {
 }
 
 // Schlafverschiebung (Non-24): Zykluslänge, tägliche Verschiebung, Vorhersage und Aktogramm
-function renderDrift() {
+export function renderDrift() {
   const now = Date.now(), days = Math.max(range(), 14);
   const r = analyzeDrift(state.sleep, { now, days });
   const hide = () => { $('sNext').hidden = true; $('sActoLeg').hidden = true; $('sActo').setAttribute('hidden', ''); };
@@ -79,7 +79,12 @@ function renderDrift() {
   ]);
   const win = n => `${fmtDay(n.bed)}, ${hhmm(n.bed)} – ${hhmm(n.wake)}`;
   $('sNext').hidden = !r.next.length;
-  if (r.next.length) $('sNext').innerHTML = `Nächster Schlaf voraussichtlich <b>${win(r.next[0])}</b>` + (r.next[1] ? `<br>danach ${win(r.next[1])}` : '');
+  if (r.next.length) {
+    // Hat das erwartete Fenster schon begonnen (du bist später dran), nicht eine Startzeit in der Vergangenheit als „nächster Schlaf“ nennen
+    const [a, b] = r.next, running = a.bed <= now;
+    $('sNext').innerHTML = (running ? `Jetzt erwartet: <b>${hhmm(a.bed)} – ${hhmm(a.wake)}</b>` : `Nächster Schlaf voraussichtlich <b>${win(a)}</b>`)
+      + (b ? `<br>danach ${win(b)}` : '');
+  }
   $('sDriftNote').textContent = `Schätzung aus ${plural(r.n, 'Nacht', 'Nächten')} der letzten ${days} Tage · Streuung ±${Math.round(r.spreadMin)} min. Keine ärztliche Diagnose.`;
 
   // Aktogramm: letzte Tage plus fünf erwartete

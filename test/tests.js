@@ -406,6 +406,35 @@ test('Non-24: lange Lücken (vier Tage nicht eingetragen) werden über die Zyklu
   ok(Math.abs(r.periodH - 24.8) < 0.03, 'Zyklus ' + r.periodH.toFixed(3));
 });
 
+// Abweichungen von der Geraden können „zäh“ sein (AR(1)): eine späte Nacht zieht die nächsten mit
+function arSeries(seed, rho, sdMin, n = 50, tauH = 24.5) {
+  let q = seed * 2654435761 % 4294967296; const rnd = () => (q = (q * 1664525 + 1013904223) % 4294967296) / 4294967296;
+  const nrm = () => { let u = 0; for (let i = 0; i < 6; i++) u += rnd(); return (u - 3) / Math.sqrt(0.5); };
+  let r = 0; const mids = [];
+  for (let k = 0; k < n; k++) { r = rho * r + Math.sqrt(1 - rho * rho) * nrm() * sdMin; mids.push(Date.UTC(2026, 8, 1, 6) + k * tauH * H + r * 60000); }
+  return mids;
+}
+function backtest(rho) {
+  const errs = [], rhos = [];
+  for (let seed = 1; seed <= 40; seed++) {
+    const mids = arSeries(seed, rho, 60), sl = mids.map(m => ({ bed: m - 4 * H, wake: m + 4 * H }));
+    for (let split = 25; split < 46; split += 4) {
+      const hist = sl.slice(0, split), r = analyzeDrift(hist, { now: hist[hist.length - 1].wake + H, days: 80 });
+      if (!r.ok) continue;
+      rhos.push(r.persistence); errs.push(Math.abs(r.next[0].mid - mids[split]) / 60000);
+    }
+  }
+  return { rho: rhos.reduce((a, b) => a + b, 0) / rhos.length, err: errs.reduce((a, b) => a + b, 0) / errs.length };
+}
+
+test('Non-24: zähe Abweichungen werden erkannt und verbessern die Vorhersage der nächsten Nacht', () => {
+  const white = backtest(0), sticky = backtest(0.85);
+  ok(white.rho < 0.2, 'weißes Rauschen: ρ ' + white.rho.toFixed(2));
+  ok(sticky.rho > 0.45, 'zäh: ρ ' + sticky.rho.toFixed(2));
+  ok(white.err < 62, 'weißes Rauschen: Fehler ' + white.err.toFixed(0) + ' min');           // Rauschgrenze ≈ 48 min, plus Schätzunsicherheit
+  ok(sticky.err < 36, 'zäh: Fehler ' + sticky.err.toFixed(0) + ' min');                      // ohne Korrektur ≈ 48 min
+});
+
 test('Non-24: geteilter Schlaf wird zusammengefasst, Nickerchen zählen nicht als Nacht', () => {
   const day = Date.UTC(2026, 8, 1);
   const eps = mainSleeps([

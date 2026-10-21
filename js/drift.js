@@ -92,10 +92,18 @@ export function analyzeDrift(sleep, { now = Date.now(), days = 28, minNights = 5
   const periodH = fit.tau / H, driftH = periodH - 24;
   const medianDur = median(eps2.slice(-7).map(e => e.wake - e.bed));
 
+  // Wandert der Schlaf nicht gleichmäßig, sondern „zäh“ (eine späte Nacht zieht die nächsten mit), hängen aufeinanderfolgende
+  // Abweichungen von der Geraden zusammen. Dann hilft es, die letzte Abweichung abklingend in die Vorhersage zu übernehmen.
+  const { r: res, m: resMed } = spreadOf(eps2, fit, ks);
+  let num = 0, den = 0, pairs = 0;
+  for (let i = 1; i < res.length; i++) if (ks[i] - ks[i - 1] === 1) { num += (res[i] - resMed) * (res[i - 1] - resMed); den += (res[i - 1] - resMed) ** 2; pairs++; }
+  const rho = pairs >= 8 && den > 0 ? Math.max(0, Math.min(0.8, num / den)) : 0;
+  const lastRes = res[res.length - 1] - resMed;
+
   // Vorhersage: die nächsten Hauptschlaf-Zyklen auf der angepassten Geraden
   const kLast = ks[ks.length - 1], next = [];
   for (let step = 1; next.length < 7 && step < 40; step++) {
-    const mid = fit.a + fit.tau * (kLast + step);
+    const mid = fit.a + fit.tau * (kLast + step) + resMed + lastRes * rho ** step;
     if (mid + medianDur / 2 <= now) continue;       // liegt schon in der Vergangenheit
     next.push({ bed: mid - medianDur / 2, wake: mid + medianDur / 2, mid });
   }
@@ -104,6 +112,6 @@ export function analyzeDrift(sleep, { now = Date.now(), days = 28, minNights = 5
   return {
     ok: true, n: eps2.length, spanDays, periodH, driftMin: driftH * 60, spreadMin: spread / 60000,
     rotationDays: Math.abs(driftH) >= 0.05 ? 24 / Math.abs(driftH) : null,
-    kind, medianDur, next,
+    kind, medianDur, next, persistence: rho,
   };
 }
