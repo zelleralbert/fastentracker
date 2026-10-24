@@ -81,12 +81,12 @@ export function movingAvg(points, days = 7) {
 
 /* ---- Training ---- */
 export const EXS = [
-  { id: 'chin', name: 'Chin-ups', hint: '0 kg = Körpergewicht', unit: 'Wdh.', cap: 12, step: 2.5 },
-  { id: 'dips', name: 'Dips', hint: '0 kg = Körpergewicht', unit: 'Wdh.', cap: 15, step: 2.5 },
-  { id: 'bss', name: 'Bulgarian Split Squats', hint: 'Wiederholungen pro Bein', unit: 'Wdh.', cap: 15, step: 2 },
-  { id: 'lat', name: 'Lateral Raises', hint: 'Gewicht pro Kurzhantel', unit: 'Wdh.', cap: 15, step: 1 },
-  { id: 'neck', name: 'Neck Bridge', hint: 'Haltedauer in Sekunden', unit: 'Sek.', cap: 60, step: 1, inc: 5 },
-  { id: 'dead', name: 'Dead Bugs', hint: 'Wiederholungen pro Seite', unit: 'Wdh.', cap: 20, step: 1 },
+  { id: 'chin', name: 'Chin-ups', hint: '0 kg = Körpergewicht', unit: 'Wdh.' },
+  { id: 'dips', name: 'Dips', hint: '0 kg = Körpergewicht', unit: 'Wdh.' },
+  { id: 'bss', name: 'Bulgarian Split Squats', hint: 'Wiederholungen pro Bein', unit: 'Wdh.' },
+  { id: 'lat', name: 'Lateral Raises', hint: 'Gewicht pro Kurzhantel', unit: 'Wdh.' },
+  { id: 'neck', name: 'Neck Bridge', hint: 'Haltedauer in Sekunden', unit: 'Sek.', inc: 5 },
+  { id: 'dead', name: 'Dead Bugs', hint: 'Wiederholungen pro Seite', unit: 'Wdh.' },
 ];
 export const exById = id => EXS.find(e => e.id === id) || EXS[0];
 
@@ -99,8 +99,8 @@ export function byDay(sets) {
 }
 export const isRecord = (prev, reps, kg) => prev.length > 0 && !prev.some(x => x.kg > kg || (x.kg === kg && x.reps >= reps));
 
-// Vorschlag für heute auf Basis der letzten Einheit (vor heute):
-// schwächsten Satz um eine Wiederholung (bzw. 5 s) steigern; schaffen alle Sätze die Obergrenze, mehr Gewicht.
+// Vorschlag für heute auf Basis der letzten Einheit (vor heute): Das Gewicht bleibt gleich, nur die Wiederholungen
+// steigen – der schwächste Satz (bei Gleichstand der letzte) um eine Wiederholung bzw. 5 Sekunden.
 export function suggestNext(sets, ex, now = Date.now()) {
   const today = dayKey(now);
   const days = byDay(sets.filter(x => dayKey(x.t) !== today));
@@ -113,7 +113,6 @@ export function suggestNext(sets, ex, now = Date.now()) {
   const r = last.filter(x => x.kg === kg).map(x => x.reps);
   const kgTxt = k => k > 0 ? ` · ${kgNum(k)} kg` : '';
   const res = { day: last[0].t, last: r.join(' / ') + kgTxt(kg) };
-  if (Math.min(...r) >= ex.cap) return { ...res, up: true, next: `${kgNum(kg + ex.step)} kg`, kg: kg + ex.step };
   const nx = r.slice(); nx[nx.lastIndexOf(Math.min(...nx))] += ex.inc || 1; // bei Gleichstand der letzte (müdeste) Satz
-  return { ...res, up: false, next: nx.join(' / ') + kgTxt(kg), reps: nx[0], kg };
+  return { ...res, next: nx.join(' / ') + kgTxt(kg), reps: nx[0], kg };
 }

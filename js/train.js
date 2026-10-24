@@ -10,7 +10,7 @@ let msgTimer;
 
 function fillInputs() {
   const s = suggestNext(sets(), ex()), l = sets().slice(-1)[0];
-  $('tReps').value = s && !s.up ? s.reps : l ? l.reps : '';
+  $('tReps').value = s ? s.reps : l ? l.reps : '';
   $('tKg').value = s ? (s.kg || '') : l && l.kg ? l.kg : '';
   $('tNote').value = '';
 }
@@ -59,9 +59,7 @@ export function renderTrain() {
 
   const s = suggestNext(all, e);
   $('tSuggest').hidden = !s;
-  if (s) $('tSuggest').innerHTML = s.up
-    ? `${fmtDay(s.day)}: <b>${s.last}</b> – alle Sätze ≥ ${e.cap}. Heute mit <b>${s.next}</b> versuchen.`
-    : `${fmtDay(s.day)}: ${s.last} → heute <b>${s.next}</b>`;
+  if (s) $('tSuggest').innerHTML = `${fmtDay(s.day)}: ${s.last} → heute <b>${s.next}</b>`;
 
   const todays = all.filter(x => dayKey(x.t) === today);
   items($('tToday'), todays.map((x, i) => ({

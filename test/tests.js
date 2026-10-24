@@ -251,13 +251,22 @@ test('Vorschlag: schwächsten Satz steigern, heutige Sätze ignorieren', () => {
     { t: T(20, 17), ex: 'chin', reps: 3, kg: 0 },
   ];
   const s = suggestNext(sets, exById('chin'), now);
-  eq(s.last, '10 / 10 / 8'); eq(s.next, '10 / 10 / 9'); eq(s.up, false);
+  eq(s.last, '10 / 10 / 8'); eq(s.next, '10 / 10 / 9'); eq(s.kg, 0);
 });
 
-test('Vorschlag: mehr Gewicht, wenn alle Sätze die Obergrenze schaffen', () => {
-  const sets = [12, 13, 12].map((r, i) => ({ t: T(18, 18, i), ex: 'chin', reps: r, kg: 5 }));
-  const s = suggestNext(sets, exById('chin'), T(20));
-  eq(s.up, true); eq(s.next, '7,5 kg');
+test('Vorschlag: auch bei sehr vielen Wiederholungen bleibt das Gewicht gleich, nur die Wiederholungen steigen', () => {
+  // Körpergewicht (0 kg): weiter nur mehr Wiederholungen, nie Zusatzgewicht
+  for (const reps of [[12, 13, 12], [15, 15, 15], [30, 28, 25], [60, 60, 60]]) {
+    const sets = reps.map((r, i) => ({ t: T(18, 18, i), ex: 'chin', reps: r, kg: 0 }));
+    const s = suggestNext(sets, exById('chin'), T(20));
+    eq(s.kg, 0, `Gewicht bei ${reps}:`); ok(!('up' in s), 'kein Gewichtssprung');
+    ok(s.next.split(' / ').map(Number).reduce((a, b) => a + b, 0) === reps.reduce((a, b) => a + b, 0) + 1, 'genau eine Wiederholung mehr: ' + s.next);
+    ok(!s.next.includes('kg'), 'Körpergewicht bleibt Körpergewicht: ' + s.next);
+  }
+  // Mit Zusatzgewicht (z. B. Kurzhanteln) bleibt dieses Gewicht ebenfalls unverändert
+  const w = [12, 13, 12].map((r, i) => ({ t: T(18, 18, i), ex: 'lat', reps: r, kg: 5 }));
+  const s = suggestNext(w, exById('lat'), T(20));
+  eq(s.kg, 5); eq(s.next, '12 / 13 / 13 · 5 kg');
 });
 
 test('Vorschlag: Neck Bridge steigert um 5 Sekunden', () => {
