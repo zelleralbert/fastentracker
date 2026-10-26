@@ -552,15 +552,18 @@ async function checkFiles() {
     ok(appV && swV === 'tagwerk-' + appV, `App ${appV} ≠ Service Worker ${swV}`);
   });
 
-  await run('Textfarben erreichen Kontrast 4,5:1 (hell und dunkel)', async () => {
+  await run('Die App ist immer dunkel und die Textfarben erreichen Kontrast 4,5:1', async () => {
     const css = await get('css/app.css');
+    ok(!css.includes('prefers-color-scheme'), 'Schema darf nicht vom Gerät abhängen');
+    ok(css.includes('color-scheme:dark') && !css.includes('color-scheme:light'), 'color-scheme dunkel');
+    ok(/name="color-scheme" content="dark"/.test(html) && !/media="\(prefers-color-scheme/.test(html), 'Meta-Tags dunkel');
     const vars = block => Object.fromEntries([...block.matchAll(/--([a-z-]+):(#[0-9a-f]{3,8})/gi)].map(m => [m[1], m[2]]));
-    const light = vars(css.split('@media')[0]), dark = { ...light, ...vars(css.split('prefers-color-scheme:dark){:root{')[1].split('}}')[0]) };
+    const dark = vars(css.split('}')[0]);
     const rgb = h => { h = h.slice(1); if (h.length === 3) h = [...h].map(c => c + c).join(''); return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16) / 255); };
     const lum = h => { const [r, g, b] = rgb(h).map(c => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
     const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
     const low = [];
-    for (const [theme, v] of [['hell', light], ['dunkel', dark]]) {
+    for (const [theme, v] of [['dunkel', dark]]) {
       for (const fg of ['text', 'muted', 'faint', 'accent', 'warn']) for (const bg of ['bg', 'surface']) if (ratio(v[fg], v[bg]) < 4.5) low.push(`${theme}: ${fg} auf ${bg} ${ratio(v[fg], v[bg]).toFixed(2)}`);
       if (ratio(v['on-accent'], v.accent) < 4.5) low.push(`${theme}: Schrift auf Akzentfläche`);
     }

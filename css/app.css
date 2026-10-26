@@ -1,13 +1,9 @@
 :root{
-  --bg:#f5f5f2;--surface:#fff;--line:#e5e5e0;--text:#17191c;--muted:#5c6167;--faint:#6b7077;
-  --accent:#127a52;--accent-soft:#127a5214;--on-accent:#fff;--warn:#935d10;--radius:16px;
-  color-scheme:light;
-}
-@media (prefers-color-scheme:dark){:root{
+  /* Die App ist immer dunkel – unabhängig von der Einstellung des Geräts */
   --bg:#0c0e11;--surface:#15181c;--line:#23272d;--text:#e9ebee;--muted:#9aa0a8;--faint:#7f858d;
-  --accent:#5fd1a0;--accent-soft:#5fd1a014;--on-accent:#06261a;--warn:#e2a64a;
+  --accent:#5fd1a0;--accent-soft:#5fd1a014;--on-accent:#06261a;--warn:#e2a64a;--radius:16px;
   color-scheme:dark;
-}}
+}
 
 *{box-sizing:border-box;margin:0;padding:0}
 [hidden]{display:none!important}
