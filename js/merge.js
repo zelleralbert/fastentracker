@@ -12,15 +12,17 @@ const rec = v => v && typeof v === 'object' && !Array.isArray(v);
 // Notizen: nur eine Zeile ohne Steuerzeichen, damit sie weder die Anzeige noch die Zusammenfassung für Claude umbauen
 export const note = v => (typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, ' ').trim().slice(0, 140) : '');
 
+// Frühere Version hatte ein Fasten-Tracking. Diese Felder gibt es nicht mehr; sanitize() lässt sie weg, und der Abgleich
+// schreibt sie dadurch auch aus dem Gist heraus (siehe sync.js).
+export const LEGACY_KEYS = ['history', 'current', 'plan', 'custom'];
+
 // Eindeutiger Schlüssel pro Eintrag; derselbe Schlüssel wird für Lösch-Markierungen (tombstones) verwendet.
 export const KEYS = {
-  history: x => 'h:' + x.start,
   sleep: x => 's:' + x.bed,
   weight: x => 'w:' + dayKey(x.t),
   train: x => 't:' + x.ex + x.t,
 };
 const ORDER = {
-  history: (x, y) => x.start - y.start,
   sleep: (x, y) => x.wake - y.wake,
   weight: (x, y) => x.t - y.t,
   train: (x, y) => x.t - y.t,
@@ -32,18 +34,11 @@ export function sanitize(d) {
   d = rec(d) ? d : {};
   const list = (v, fn) => (Array.isArray(v) ? v : []).map(x => (rec(x) ? fn(x) : null)).filter(Boolean);
 
-  const current = rec(d.current) && isTime(d.current.start) && inRange(d.current.goalH, 1, 72)
-    ? { start: d.current.start, goalH: d.current.goalH, notified: d.current.notified === true } : null;
   const deleted = {};
   // Schlüssel sortieren: sonst unterscheiden sich gleiche Stände nur in der Reihenfolge und werden endlos neu hochgeladen
-  if (rec(d.deleted)) for (const k of Object.keys(d.deleted).sort()) if (num(d.deleted[k])) deleted[k] = d.deleted[k];
+  if (rec(d.deleted)) for (const k of Object.keys(d.deleted).sort()) if (num(d.deleted[k]) && !k.startsWith('h:')) deleted[k] = d.deleted[k];
 
   return {
-    plan: typeof d.plan === 'string' && d.plan.length <= 12 ? d.plan : '16:8',
-    custom: inRange(d.custom, 1, 72) ? d.custom : 16,
-    current,
-    history: list(d.history, x => isTime(x.start) && isTime(x.end) && x.end > x.start && inRange(x.goalH, 1, 72)
-      ? { start: x.start, end: x.end, goalH: x.goalH, reached: x.reached === true } : null),
     sleep: list(d.sleep, x => isTime(x.bed) && isTime(x.wake) && x.wake > x.bed ? { bed: x.bed, wake: x.wake } : null),
     sleepNow: isTime(d.sleepNow) ? d.sleepNow : null,
     weight: list(d.weight, x => isTime(x.t) && inRange(x.kg, 20, 400)
@@ -60,7 +55,7 @@ const json = JSON.stringify;
 
 // Listen werden vereinigt, gelöschte Einträge bleiben gelöscht, bei gleichem Schlüssel gewinnt das neuere `u`
 // (bei Gleichstand ein fester Vergleich, damit beide Geräte dasselbe Ergebnis erzeugen).
-// Einzelwerte (Plan, Übung …) kommen aus dem zuletzt geänderten Stand.
+// Einzelwerte (gewählte Übung …) kommen aus dem zuletzt geänderten Stand.
 export function mergeDocs(a, b) {
   a = sanitize(a); b = sanitize(b);
   const dead = {};
@@ -81,11 +76,9 @@ export function mergeDocs(a, b) {
     out[name] = [...m.values()].sort(ORDER[name]);
   }
 
-  // Ein laufendes Fasten/Schlafen geht nicht verloren, nur weil das andere Gerät zuletzt etwas anderes geändert hat …
-  // … wurde es aber irgendwo beendet, abgebrochen oder der Eintrag gelöscht, bleibt es beendet.
-  const fastAlive = c => c && !out.history.some(h => h.start === c.start) && !(('h:' + c.start) in dead);
+  // Ein laufender Schlaf geht nicht verloren, nur weil das andere Gerät zuletzt etwas anderes geändert hat …
+  // … wurde er aber irgendwo beendet, abgebrochen oder der Eintrag gelöscht, bleibt er beendet.
   const sleepAlive = t => t != null && !out.sleep.some(s => s.bed === t) && !(('s:' + t) in dead);
-  out.current = [base.current, other.current].find(fastAlive) || null;
   out.sleepNow = [base.sleepNow, other.sleepNow].find(sleepAlive) ?? null;
   return sanitize(out);
 }

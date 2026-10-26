@@ -1,6 +1,6 @@
 // Abgleich über ein geheimes GitHub-Gist, dazu Backup per Datei.
 import { state, save, replaceState, on, ui, saveUi } from './store.js';
-import { mergeDocs, sanitize, dayKey } from './merge.js';
+import { mergeDocs, sanitize, dayKey, LEGACY_KEYS } from './merge.js';
 import { buildSummary } from './summary.js';
 import { fmtDate, hhmm } from './logic.js';
 import { $ } from './ui.js';
@@ -37,7 +37,9 @@ export async function syncNow(manual) {
     if (out !== JSON.stringify(sanitize(state))) replaceState(merged);
 
     const files = {};
-    if (!remote || out !== JSON.stringify(sanitize(remote))) files[DATA] = { content: out };
+    // Enthält das Gist noch Fasten-Daten der früheren Version, ohne sonstige Änderung trotzdem neu schreiben (löscht sie dort)
+    const legacy = !!remote && typeof remote === 'object' && LEGACY_KEYS.some(k => k in remote);
+    if (!remote || legacy || out !== JSON.stringify(sanitize(remote))) files[DATA] = { content: out };
     // Zusammenfassung bei Datenänderung, sonst höchstens stündlich aktualisieren
     if (files[DATA] || !g.files[SUMMARY] || Date.now() - (sync.sumAt || 0) > 3600000) files[SUMMARY] = { content: buildSummary(state) };
     if (Object.keys(files).length) {
@@ -82,7 +84,7 @@ function exportData() {
 async function importData(file) {
   try {
     const raw = JSON.parse(await file.text());
-    const lists = ['history', 'sleep', 'weight', 'train'];
+    const lists = ['sleep', 'weight', 'train'];
     if (!raw || typeof raw !== 'object' || !lists.some(k => Array.isArray(raw[k]))) throw new Error('keine Tagwerk-Sicherung');
     const data = sanitize(raw), count = lists.reduce((a, k) => a + data[k].length, 0);
     if (!count) throw new Error('keine gültigen Einträge gefunden');

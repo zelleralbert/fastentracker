@@ -30,21 +30,12 @@ svg.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.7;stro
 .icon-btn.alert{color:var(--warn)}
 
 /* Kopfbereich je Tab */
-.ring-wrap{position:relative;width:min(70vw,248px);margin:10px auto 0}
-.ring{width:100%;display:block;transform:rotate(-90deg)}
-.ring circle{fill:none;stroke-width:7}
-.ring .bg{stroke:var(--line)}
-.ring .fg{stroke:var(--accent);stroke-linecap:round;transition:stroke-dashoffset .6s ease}
-.ring-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
 .big{font-size:2.4rem;font-weight:300;letter-spacing:-.03em;font-variant-numeric:tabular-nums;line-height:1.1}
 .big small{font-size:1rem;color:var(--muted);margin-left:4px;letter-spacing:0}
 .hero{text-align:center;padding:26px 0 8px}
 .muted{color:var(--muted)}
 .fine{font-size:.78rem;color:var(--faint)}
 .center{text-align:center}
-.phase{text-align:center}
-.phase b{font-weight:600}
-.phase p{color:var(--muted);font-size:.88rem;max-width:34ch;margin:4px auto 0}
 
 /* Bedienelemente */
 .chips{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
@@ -109,14 +100,6 @@ details[open] summary::after{content:'−'}
 .del{background:none;border:0;color:var(--faint);padding:10px 12px;font-size:.95rem;flex:none;min-width:40px;min-height:40px}
 .ok{color:var(--accent)}.warn{color:var(--warn)}
 .empty{color:var(--faint);font-size:.88rem;text-align:center;padding:10px 0}
-.ph{display:flex;gap:14px;padding:9px 0;color:var(--faint)}
-.ph b{font-weight:600}
-.ph p{font-size:.84rem}
-.ph .h{min-width:34px;font-variant-numeric:tabular-nums}
-.ph.past{color:var(--muted)}
-.ph.now{color:var(--text)}
-.ph.now .h{color:var(--accent);font-weight:600}
-.ph.now p{color:var(--muted)}
 
 /* Einstellungen */
 .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px}

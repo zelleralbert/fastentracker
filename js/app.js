@@ -1,19 +1,18 @@
 import { on, ui, saveUi, range } from './store.js';
 import { $ } from './ui.js';
 import { RANGES, rangeLabel, dayKey } from './logic.js';
-import { initFast, renderFast, tickFast } from './fast.js';
 import { initSleep, renderSleep, renderDrift, tickSleep } from './sleep.js';
 import { initTrain, renderTrain } from './train.js';
 import { initWeight, renderWeight } from './weight.js';
 import { initSync, renderSettings } from './sync.js';
 import { initTheme } from './theme.js';
 
-const VERSION = '2.12';
-const TITLES = { fast: 'Fasten', sleep: 'Schlaf', train: 'Training', weight: 'Gewicht', settings: 'Einstellungen' };
+const VERSION = '2.13';
+const TITLES = { sleep: 'Schlaf', train: 'Training', weight: 'Gewicht', settings: 'Einstellungen' };
 
 // Jeder Bereich wird einzeln abgesichert: ein Fehler in einem darf die übrigen nicht blockieren.
 function renderAll() {
-  for (const f of [renderSegs, renderFast, renderSleep, renderTrain, renderWeight, renderSettings]) {
+  for (const f of [renderSegs, renderSleep, renderTrain, renderWeight, renderSettings]) {
     try { f(); } catch (e) { console.error(f.name, e); }
   }
 }
@@ -29,9 +28,9 @@ document.addEventListener('click', e => {
   ui.range = Number(b.dataset.r); saveUi(); renderAll();
 });
 
-let current = 'fast';
+let current = 'sleep';
 function showTab(t) {
-  if (!TITLES[t]) t = 'fast';
+  if (!TITLES[t]) t = 'sleep';
   current = t;
   document.querySelectorAll('[data-view]').forEach(v => { v.hidden = v.dataset.view !== t; });
   document.querySelectorAll('#tabs button').forEach(b => {
@@ -45,20 +44,20 @@ function showTab(t) {
   scrollTo(0, 0);
 }
 document.querySelectorAll('#tabs button').forEach(b => { b.onclick = () => showTab(b.dataset.tab); });
-$('gear').onclick = () => showTab(current === 'settings' ? ui.back || 'fast' : 'settings');
+$('gear').onclick = () => showTab(current === 'settings' ? ui.back || 'sleep' : 'settings');
 $('version').textContent = 'Tagwerk ' + VERSION;
 
-initTheme(); initFast(); initSleep(); initTrain(); initWeight();
+initTheme(); initSleep(); initTrain(); initWeight();
 on('change', renderAll);
 renderAll();
 let legacyTab = null; try { legacyTab = localStorage.getItem('fasten-v1-tab'); } catch {}
-showTab(ui.tab || legacyTab || 'fast');
+showTab(ui.tab || legacyTab || 'sleep');
 initSync();
 
 // Über Mitternacht offen gelassen: „heute“, Zeiträume und Diagramme neu berechnen
 let shownDay = dayKey(Date.now()), ticks = 0;
 setInterval(() => {
-  tickFast(); tickSleep();
+  tickSleep();
   const d = dayKey(Date.now());
   if (d !== shownDay) { shownDay = d; renderAll(); }
   // „Nächster Schlaf“ und „Jetzt erwartet“ veralten, wenn die App stundenlang offen bleibt: alle 5 Minuten auffrischen

@@ -8,12 +8,6 @@ function block(s, now, days, withNotes) {
   const from = rangeStart(now, days), L = [];
   L.push(`## ${rangeTitle(days)} (${fmtFull(from)} – ${fmtFull(now)})`, '');
 
-  const f = (s.history || []).filter(x => x.end >= from);
-  if (f.length) {
-    const d = f.map(x => (x.end - x.start) / H);
-    L.push(`- **Fasten:** ${f.length} abgeschlossen, ${f.filter(x => x.reached).length} mit Ziel erreicht, Ø ${num(avg(d))} h, längstes ${num(Math.max(...d))} h`);
-  } else L.push('- **Fasten:** keine abgeschlossenen Einträge');
-
   const n = (s.sleep || []).filter(x => x.wake >= from);
   if (n.length) {
     const d = n.map(x => x.wake - x.bed);
@@ -66,9 +60,8 @@ function driftBlock(s, now) {
 
 export function buildSummary(s, now = Date.now()) {
   const L = ['# Tagwerk – Zusammenfassung', '', `Stand: ${fmtDate(now)}`, ''];
-  if (s.current) L.push(`- **Fasten läuft** seit ${fmtDate(s.current.start)}: ${num((now - s.current.start) / H)} h von ${s.current.goalH} h`);
   if (s.sleepNow) L.push(`- **Schläft** seit ${fmtDate(s.sleepNow)}`);
-  if (s.current || s.sleepNow) L.push('');
+  if (s.sleepNow) L.push('');
   L.push(...block(s, now, 7, true), ...block(s, now, 30, false), ...block(s, now, 365, false));
   L.push(...driftBlock(s, now));
   L.push('---', 'Rohdaten: fastentracker.json · Zeiten als Unix-ms · Training: `reps` = Wiederholungen, bei Neck Bridge Sekunden; `kg` = Zusatzgewicht; `n` = Notiz');

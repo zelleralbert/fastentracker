@@ -1,6 +1,6 @@
 # Tagwerk
 
-Minimalistische PWA für Fasten, Schlaf, Training und Gewicht. Läuft ohne Build-Schritt und ohne Abhängigkeiten.
+Minimalistische PWA für Schlaf, Training und Gewicht. Läuft ohne Build-Schritt und ohne Abhängigkeiten.
 
 ## Aufbau
 
@@ -12,7 +12,7 @@ Minimalistische PWA für Fasten, Schlaf, Training und Gewicht. Läuft ohne Build
 | `js/summary.js` | Markdown-Zusammenfassung für Claude (`zusammenfassung.md` im Gist) |
 | `js/store.js` | Datenstand im Browser, Speichern, Lösch-Markierungen |
 | `js/sync.js` | Sync über geheimes GitHub-Gist, Export/Import |
-| `js/fast.js`, `sleep.js`, `train.js`, `weight.js` | die vier Bereiche |
+| `js/sleep.js`, `train.js`, `weight.js` | die drei Bereiche |
 | `js/theme.js` | Dunkelmodus ein/aus (nur für dieses Gerät) |
 | `js/ui.js` | DOM-Helfer und Diagramme |
 | `sw.js` | Offline-Cache – bei jeder Veröffentlichung `VERSION` erhöhen |
@@ -29,4 +29,4 @@ Dann `http://localhost:8765/test/` aufrufen.
 
 ## Datenformat (`fastentracker.json`)
 
-Zeiten in Unix-Millisekunden. `history` = abgeschlossene Fastenzeiten, `sleep` = Nächte (`bed`, `wake`), `weight` (`t`, `kg`), `train` (`t`, `ex`, `reps`, `kg`, optional `n` = Notiz; bei `neck` sind `reps` Sekunden). `deleted` enthält Lösch-Markierungen für den Sync.
+Zeiten in Unix-Millisekunden. `sleep` = Nächte (`bed`, `wake`), `weight` (`t`, `kg`), `train` (`t`, `ex`, `reps`, `kg`, optional `n` = Notiz; bei `neck` sind `reps` Sekunden). `deleted` enthält Lösch-Markierungen für den Sync.

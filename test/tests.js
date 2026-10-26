@@ -1,5 +1,5 @@
 // Tests für Zusammenführung, Logik und Zusammenfassung. Laufen im Browser über test/index.html.
-import { mergeDocs, sanitize, dayKey } from '../js/merge.js';
+import { mergeDocs, sanitize, dayKey, LEGACY_KEYS } from '../js/merge.js';
 import { avgClock, movingAvg, suggestNext, isRecord, exById, buckets, rangeStart, endOfDay, D, H } from '../js/logic.js';
 import { buildSummary } from '../js/summary.js';
 import { analyzeDrift, mainSleeps } from '../js/drift.js';
@@ -17,7 +17,7 @@ function eq(a, b, msg = '') {
 const ok = (v, msg) => { if (!v) throw new Error(msg || 'Bedingung nicht erfüllt'); };
 
 const T = (d, h = 12, m = 0) => new Date(2026, 9, d, h, m).getTime(); // Oktober 2026, lokale Zeit
-const doc = o => ({ history: [], sleep: [], weight: [], train: [], deleted: {}, mod: 0, ...o });
+const doc = o => ({ sleep: [], weight: [], train: [], deleted: {}, mod: 0, ...o });
 
 /* ---- mergeDocs ---- */
 test('vereinigt Listen beider Geräte', () => {
@@ -29,9 +29,9 @@ test('vereinigt Listen beider Geräte', () => {
 });
 
 test('identische Einträge werden nicht verdoppelt', () => {
-  const x = { start: T(3, 20), end: T(4, 12), goalH: 16, reached: true };
-  const m = mergeDocs(doc({ history: [x] }), doc({ history: [{ ...x }] }));
-  eq(m.history.length, 1);
+  const x = { bed: T(3, 23), wake: T(4, 7) };
+  const m = mergeDocs(doc({ sleep: [x] }), doc({ sleep: [{ ...x }] }));
+  eq(m.sleep.length, 1);
 });
 
 test('gelöschter Eintrag kommt vom anderen Gerät nicht zurück', () => {
@@ -56,33 +56,14 @@ test('Gewicht: nach Löschen neu eingetragen bleibt erhalten', () => {
 });
 
 test('Einzelwerte kommen aus dem neueren Stand', () => {
-  const m = mergeDocs(doc({ plan: '16:8', mod: 1 }), doc({ plan: '18:6', mod: 2 }));
-  eq(m.plan, '18:6'); eq(m.mod, 2);
-});
-
-test('beendetes Fasten startet durch alten Stand nicht neu', () => {
-  const start = T(9, 20);
-  const a = doc({ current: null, history: [{ start, end: T(10, 12), goalH: 16, reached: true }], mod: 5 });
-  const b = doc({ current: { start, goalH: 16 }, weight: [{ t: T(10), kg: 80, u: 1 }], mod: 9 });
-  const m = mergeDocs(a, b);
-  eq(m.current, null); eq(m.history.length, 1); eq(m.weight.length, 1);
+  const m = mergeDocs(doc({ ex: 'chin', mod: 1 }), doc({ ex: 'dips', mod: 2 }));
+  eq(m.ex, 'dips'); eq(m.mod, 2);
 });
 
 test('beendeter Schlaf startet durch alten Stand nicht neu', () => {
   const bed = T(11, 23);
   const m = mergeDocs(doc({ sleep: [{ bed, wake: T(12, 7) }], mod: 1 }), doc({ sleepNow: bed, mod: 2 }));
   eq(m.sleepNow, null);
-});
-
-test('laufendes Fasten bleibt, wenn das andere Gerät später etwas anderes ändert', () => {
-  const cur = { start: T(13, 20), goalH: 16 };
-  const m = mergeDocs(doc({ current: cur, mod: 5 }), doc({ current: null, weight: [{ t: T(14), kg: 80, u: 9 }], mod: 9 }));
-  eq(m.current.start, cur.start); eq(m.weight.length, 1);
-});
-
-test('geänderte Startzeit: neuerer Stand gewinnt', () => {
-  const m = mergeDocs(doc({ current: { start: T(13, 20), goalH: 16 }, mod: 5 }), doc({ current: { start: T(13, 19), goalH: 16 }, mod: 9 }));
-  eq(m.current.start, T(13, 19));
 });
 
 test('abgebrochener Schlaf bleibt abgebrochen', () => {
@@ -103,44 +84,26 @@ test('Merge verändert die Eingaben nicht und ist idempotent', () => {
 
 test('gleicher Eintrag mit unterschiedlichem Inhalt: beide Geräte erhalten dasselbe Ergebnis', () => {
   const start = T(16, 20);
-  const a = doc({ history: [{ start, end: T(17, 12), goalH: 16, reached: true }], mod: 3 });
-  const b = doc({ history: [{ start, end: T(17, 12, 5), goalH: 16, reached: true }], mod: 4 });
-  eq(mergeDocs(a, b), mergeDocs(b, a));
   const s1 = doc({ sleep: [{ bed: T(1, 23), wake: T(2, 7) }] }), s2 = doc({ sleep: [{ bed: T(1, 23), wake: T(2, 8) }] });
   eq(mergeDocs(s1, s2), mergeDocs(s2, s1));
 });
 
 test('gleicher Zeitstempel, unterschiedliche Einstellungen: Ergebnis hängt nicht von der Reihenfolge ab', () => {
-  const a = doc({ plan: '16:8', mod: 5 }), b = doc({ plan: '18:6', mod: 5 });
+  const a = doc({ ex: 'chin', mod: 5 }), b = doc({ ex: 'dips', mod: 5 });
   eq(mergeDocs(a, b), mergeDocs(b, a));
-});
-
-test('neues Fasten geht nicht verloren, wenn das andere Gerät neuer gespeichert hat', () => {
-  const oldStart = T(14, 20), newStart = T(15, 20);
-  const a = doc({ current: { start: newStart, goalH: 16 }, history: [{ start: oldStart, end: T(15, 12), goalH: 16, reached: true }], mod: 5 });
-  const b = doc({ current: { start: oldStart, goalH: 16 }, weight: [{ t: T(15), kg: 80, u: 9 }], mod: 9 });
-  eq(mergeDocs(a, b).current.start, newStart); eq(mergeDocs(b, a).current.start, newStart);
-});
-
-test('gelöschter Verlaufseintrag lässt das Fasten nicht wieder aufleben', () => {
-  const start = T(14, 20);
-  const a = doc({ current: null, deleted: { ['h:' + start]: T(16) }, mod: 9 });
-  const b = doc({ current: { start, goalH: 16 }, mod: 5 });
-  eq(mergeDocs(a, b).current, null);
 });
 
 test('beschädigte Daten werden bereinigt statt übernommen', () => {
   const bad = {
-    plan: 5, custom: 'x', current: { start: 'jetzt', goalH: 16 }, ex: 'hack',
-    history: [{ start: T(1), end: T(1) - 5, goalH: 16 }, null, 'x', { start: T(2), end: T(3), goalH: 16, reached: true }],
+    ex: 'hack',
     sleep: [{ bed: T(1), wake: T(1) - 1 }, { bed: T(1, 23), wake: T(2, 7) }],
     weight: [{ t: T(1), kg: '<img src=x onerror=alert(1)>' }, { t: T(2), kg: 81 }, { t: T(3), kg: 5 }],
     train: [{ t: T(1), ex: 'chin', reps: 8, kg: '<b>' }, { t: T(2), ex: 'nope', reps: 8, kg: 0 }, { t: T(3), ex: 'dips', reps: 10, kg: 0, n: 'ok' }],
     deleted: { a: 'x', b: 5 }, mod: 'neu',
   };
   const s = sanitize(bad);
-  eq([s.plan, s.custom, s.current, s.ex, s.mod], ['16:8', 16, null, 'chin', 0]);
-  eq([s.history.length, s.sleep.length, s.weight.length, s.train.length], [1, 1, 1, 1]);
+  eq([s.ex, s.mod], ['chin', 0]);
+  eq([s.sleep.length, s.weight.length, s.train.length], [1, 1, 1]);
   eq(s.train[0].n, 'ok'); eq(s.deleted, { b: 5 });
   eq(sanitize(s), s, 'idempotent:');
 });
@@ -150,10 +113,24 @@ test('unmögliche Zeitpunkte werden verworfen (sonst Ausnahme beim Formatieren)'
     train: [{ t: 1e20, ex: 'chin', reps: 5, kg: 0 }, { t: 5, ex: 'chin', reps: 5, kg: 0 }, { t: T(1), ex: 'chin', reps: 5, kg: 0 }],
     weight: [{ t: 8.64e15 + 1, kg: 80 }, { t: T(1), kg: 80 }],
     sleep: [{ bed: 1, wake: 2 }, { bed: T(1, 23), wake: T(2, 7) }],
-    history: [{ start: T(1), end: 1e300, goalH: 16 }],
-    current: { start: -5, goalH: 16 }, sleepNow: 1e20,
+    sleepNow: 1e20,
   });
-  eq([s.train.length, s.weight.length, s.sleep.length, s.history.length, s.current, s.sleepNow], [1, 1, 1, 0, null, null]);
+  eq([s.train.length, s.weight.length, s.sleep.length, s.sleepNow], [1, 1, 1, null]);
+});
+
+test('Fasten-Daten früherer Versionen werden beim Bereinigen und Abgleichen gelöscht', () => {
+  const old = {
+    plan: '18:6', custom: 20, current: { start: T(1), goalH: 16, notified: false },
+    history: [{ start: T(2), end: T(3), goalH: 16, reached: true }],
+    sleep: [{ bed: T(1, 23), wake: T(2, 7) }], deleted: { ['h:' + T(2)]: T(4), 't:chin1': T(4) }, mod: 5,
+  };
+  const s = sanitize(old);
+  for (const k of LEGACY_KEYS) ok(!(k in s), k + ' ist noch vorhanden');
+  eq(s.sleep.length, 1); eq(Object.keys(s.deleted), ['t:chin1']);
+  // Ein älteres Gerät mit Fasten-Daten bringt sie über den Abgleich nicht zurück, die übrigen Daten bleiben
+  const m = mergeDocs(doc({ mod: 9 }), old);
+  for (const k of LEGACY_KEYS) ok(!(k in m), k + ' nach dem Abgleich vorhanden');
+  eq(m.sleep.length, 1, 'Schlafdaten:');
 });
 
 test('ungültige Eingaben (null, Liste, Text) lassen den Merge nicht abstürzen', () => {
@@ -164,13 +141,13 @@ test('ungültige Eingaben (null, Liste, Text) lassen den Merge nicht abstürzen'
 });
 
 test('Merge liefert immer dieselbe Schlüsselreihenfolge', () => {
-  const a = mergeDocs({}, {}), b = mergeDocs(doc({ plan: '18:6', mod: 3 }), {});
+  const a = mergeDocs({}, {}), b = mergeDocs(doc({ ex: 'dips', mod: 3 }), {});
   eq(Object.keys(a), Object.keys(b));
 });
 
 test('alte Stände ohne deleted/Listen funktionieren', () => {
-  const m = mergeDocs({ plan: '16:8' }, { train: [{ t: T(1), ex: 'chin', reps: 5, kg: 0 }] });
-  eq(m.train.length, 1); eq(m.history, []); eq(m.deleted, {});
+  const m = mergeDocs({ ex: 'dips' }, { train: [{ t: T(1), ex: 'chin', reps: 5, kg: 0 }] });
+  eq(m.train.length, 1); eq(m.deleted, {});
 });
 
 /* ---- Zwei Geräte, zufällige Bedienung ---- */
@@ -182,7 +159,7 @@ function simulate(seed) {
   const tick = () => { clock += 60000 + Math.floor(rnd() * 3 * H); return clock; };
   const dev = [sanitize({}), sanitize({})];
   let remote = null;
-  const added = { train: new Set(), sleep: new Set(), history: new Set() }, removed = new Set();
+  const added = { train: new Set(), sleep: new Set() }, removed = new Set();
   const del = (d, key) => { d.deleted[key] = clock; removed.add(key); };
 
   const ops = [
@@ -190,12 +167,10 @@ function simulate(seed) {
     d => { if (!d.train.length) return false; const x = pick(d.train); del(d, 't:' + x.ex + x.t); d.train.splice(d.train.indexOf(x), 1); },
     d => { const day = T(1 + Math.floor(rnd() * 5)); const k = dayKey(day); d.weight = d.weight.filter(x => dayKey(x.t) !== k); d.weight.push({ t: day, kg: 80 + Math.floor(rnd() * 50) / 10, u: clock }); },
     d => { if (!d.weight.length) return false; const x = pick(d.weight); del(d, 'w:' + dayKey(x.t)); d.weight.splice(d.weight.indexOf(x), 1); },
-    d => { if (d.current) return false; d.current = { start: clock, goalH: 16, notified: false }; },
-    d => { if (!d.current) return false; const h = { start: d.current.start, end: clock, goalH: 16, reached: false }; d.history.push(h); added.history.add('h:' + h.start); d.current = null; },
     d => { if (d.sleepNow) return false; d.sleepNow = clock; },
     d => { if (d.sleepNow == null || clock - d.sleepNow < 11 * 60000) return false; const x = { bed: d.sleepNow, wake: clock }; d.sleep.push(x); added.sleep.add('s:' + x.bed); d.sleepNow = null; },
     d => { if (d.sleepNow == null) return false; del(d, 's:' + d.sleepNow); d.sleepNow = null; },
-    d => { d.plan = pick(['16:8', '18:6', '12:12']); },
+    d => { d.ex = pick(['chin', 'dips', 'neck']); },
   ];
   const sync = i => { const m = remote ? mergeDocs(dev[i], remote) : sanitize(dev[i]); dev[i] = m; remote = m; };
 
@@ -223,7 +198,7 @@ test('zwei Geräte, 300 zufällige Abläufe: beide landen beim selben Stand und 
 test('zwei Geräte: keine Einträge gehen verloren und gelöschte kommen nicht zurück', () => {
   for (let seed = 1; seed <= 300; seed++) {
     const { remote, added, removed } = simulate(seed);
-    const present = new Set([...remote.train.map(x => 't:' + x.ex + x.t), ...remote.sleep.map(x => 's:' + x.bed), ...remote.history.map(x => 'h:' + x.start)]);
+    const present = new Set([...remote.train.map(x => 't:' + x.ex + x.t), ...remote.sleep.map(x => 's:' + x.bed)]);
     for (const set of Object.values(added)) for (const k of set) {
       if (removed.has(k)) ok(!present.has(k), `Seed ${seed}: gelöschter Eintrag ${k} ist zurück`);
       else ok(present.has(k), `Seed ${seed}: Eintrag ${k} ging verloren`);
@@ -509,14 +484,11 @@ test('Zusammenfassung mit leeren Daten', () => {
 test('Zusammenfassung mit Daten', () => {
   const now = T(19, 20);
   const s = buildSummary(doc({
-    current: { start: now - 4 * H, goalH: 16 },
-    history: [{ start: T(17, 20), end: T(18, 13), goalH: 16, reached: true }],
     sleep: [{ bed: T(18, 23), wake: T(19, 7) }],
     weight: [{ t: T(12), kg: 86 }, { t: T(19), kg: 85 }],
     train: [{ t: T(19, 18), ex: 'chin', reps: 10, kg: 0, n: 'Schulter zwickt' }, { t: T(19, 18, 3), ex: 'neck', reps: 45, kg: 0 }],
   }), now);
-  ok(s.includes('Fasten läuft'), 'laufendes Fasten');
-  ok(s.includes('1 abgeschlossen, 1 mit Ziel erreicht'), 'Fasten');
+  ok(!/\*\*Fasten|Fasten läuft/.test(s), 'kein Fasten mehr in der Zusammenfassung');
   ok(s.includes('Ø 8:00 h'), 'Schlaf');
   ok(s.includes('| Chin-ups | 1 | 1 | 10 Wdh. | 10 Wdh. |'), 'Training-Tabelle');
   ok(s.includes('45 Sek.'), 'Neck Bridge in Sekunden');

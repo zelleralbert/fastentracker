@@ -15,38 +15,15 @@
 </head>
 <body>
 <header class="top">
-  <h1 id="title">Fasten</h1>
+  <h1 id="title">Schlaf</h1>
   <button class="icon-btn" id="gear" aria-label="Einstellungen">
     <svg class="i" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>
   </button>
 </header>
 
 <main>
-  <!-- Fasten -->
-  <section data-view="fast">
-    <div class="ring-wrap">
-      <svg class="ring" viewBox="0 0 200 200"><circle class="bg" cx="100" cy="100" r="90"/><circle class="fg" id="fArc" cx="100" cy="100" r="90"/></svg>
-      <div class="ring-center"><div class="big" id="fMain">16:00:00</div><div class="muted" id="fSub"></div></div>
-    </div>
-    <div class="phase" id="fPhase"></div>
-    <div class="chips" id="fPlans"></div>
-    <label class="inline" id="fCustomRow" hidden><span>Stunden</span><input class="field" id="fCustom" type="number" min="1" max="72" inputmode="numeric"></label>
-    <button class="btn primary" id="fGo">Fasten starten</button>
-    <div class="links" id="fLinks" hidden><button class="link" id="fEditBtn">Startzeit ändern</button></div>
-    <div class="inline" id="fEdit" hidden><input class="field" type="datetime-local" id="fStartIn"><button class="btn" id="fStartSave" style="width:auto;padding:12px 16px">OK</button></div>
-
-    <div class="head"><h2>Überblick</h2><div class="seg"></div></div>
-    <div class="stats" id="fStats"></div>
-    <div class="bars" id="fBars"></div>
-    <div class="legend"><span><i style="background:var(--accent)"></i>Ziel erreicht</span><span><i style="background:var(--warn)"></i>Ziel verfehlt</span></div>
-
-    <details><summary>Phasen</summary><div id="fPhases"></div>
-      <p class="fine" style="padding:8px 0 4px">Richtwerte, individuell verschieden; die Studienlage ist teils begrenzt. Keine medizinische Beratung – bei Vorerkrankungen, Schwangerschaft oder Medikamenten vorher ärztlich abklären.</p></details>
-    <details><summary>Verlauf</summary><div id="fHist"></div></details>
-  </section>
-
   <!-- Schlaf -->
-  <section data-view="sleep" hidden>
+  <section data-view="sleep">
     <div class="hero"><div class="big" id="sMain">–</div><div class="muted" id="sSub"></div></div>
     <button class="btn primary" id="sGo">Schlafen gehen</button>
     <div class="links"><button class="link" id="sCancel" hidden>Abbrechen</button><button class="link" id="sManualBtn">Nacht nachtragen</button></div>
@@ -148,7 +125,6 @@
 </main>
 
 <nav class="tabs" id="tabs">
-  <button data-tab="fast"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M10 2h4"/></svg>Fasten</button>
   <button data-tab="sleep"><svg class="i" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg>Schlaf</button>
   <button data-tab="train"><svg class="i" viewBox="0 0 24 24"><path d="M6.5 7v10M17.5 7v10M3.5 9.5v5M20.5 9.5v5M6.5 12h11"/></svg>Training</button>
   <button data-tab="weight"><svg class="i" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8.5 10a5 5 0 0 1 7 0M12 10l1.5-1.8"/></svg>Gewicht</button>

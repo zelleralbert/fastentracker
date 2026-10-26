@@ -1,5 +1,5 @@
 import { RANGES } from './logic.js';
-import { sanitize } from './merge.js';
+import { sanitize, LEGACY_KEYS } from './merge.js';
 
 // Zentraler Datenstand. Der Schlüssel bleibt 'fasten-v1', damit bestehende Daten erhalten bleiben.
 export const KEY = 'fasten-v1';
@@ -14,7 +14,10 @@ const write = (k, v) => {
 };
 
 // Beim Laden bereinigen: ein beschädigter Eintrag darf die App nicht lahmlegen.
-export const state = sanitize(read(KEY, {}));
+// Daten des früheren Fasten-Trackings werden dabei gelöscht und der lokale Speicher sofort neu geschrieben.
+const stored = read(KEY, {});
+export const state = sanitize(stored);
+if (LEGACY_KEYS.some(k => k in stored)) write(KEY, state);
 
 const listeners = { save: [], change: [] };
 export const on = (ev, fn) => listeners[ev].push(fn);
