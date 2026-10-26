@@ -6,8 +6,9 @@ import { initSleep, renderSleep, renderDrift, tickSleep } from './sleep.js';
 import { initTrain, renderTrain } from './train.js';
 import { initWeight, renderWeight } from './weight.js';
 import { initSync, renderSettings } from './sync.js';
+import { initTheme } from './theme.js';
 
-const VERSION = '2.11';
+const VERSION = '2.12';
 const TITLES = { fast: 'Fasten', sleep: 'Schlaf', train: 'Training', weight: 'Gewicht', settings: 'Einstellungen' };
 
 // Jeder Bereich wird einzeln abgesichert: ein Fehler in einem darf die übrigen nicht blockieren.
@@ -47,7 +48,7 @@ document.querySelectorAll('#tabs button').forEach(b => { b.onclick = () => showT
 $('gear').onclick = () => showTab(current === 'settings' ? ui.back || 'fast' : 'settings');
 $('version').textContent = 'Tagwerk ' + VERSION;
 
-initFast(); initSleep(); initTrain(); initWeight();
+initTheme(); initFast(); initSleep(); initTrain(); initWeight();
 on('change', renderAll);
 renderAll();
 let legacyTab = null; try { legacyTab = localStorage.getItem('fasten-v1-tab'); } catch {}

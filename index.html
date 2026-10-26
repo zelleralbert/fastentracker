@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0c0e11">
 <meta name="color-scheme" content="dark">
-<style>html{background:#0c0e11;color-scheme:dark}</style>
+<style>html{background:#0c0e11;color-scheme:dark}html[data-theme=light]{background:#f5f5f2;color-scheme:light}</style>
+<script>try{if(JSON.parse(localStorage.getItem('tagwerk-ui')||'{}').theme==='light'){document.documentElement.dataset.theme='light';document.querySelector('meta[name=theme-color]').content='#f5f5f2';document.querySelector('meta[name=color-scheme]').content='light'}}catch(e){}</script>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.svg">
 <link rel="stylesheet" href="css/app.css">
@@ -110,6 +111,11 @@
 
   <!-- Einstellungen -->
   <section data-view="settings" hidden>
+    <div class="card">
+      <div class="row-switch"><h3 id="themeLbl">Dunkelmodus</h3><button class="switch" id="themeSwitch" role="switch" aria-checked="true" aria-labelledby="themeLbl"></button></div>
+      <p>Gilt nur für dieses Gerät.</p>
+    </div>
+
     <div class="card">
       <h3>Synchronisierung</h3>
       <p>Deine Daten liegen in einem geheimen GitHub-Gist und werden zwischen deinen Geräten abgeglichen. Dort liegt auch eine Zusammenfassung für Claude.</p>

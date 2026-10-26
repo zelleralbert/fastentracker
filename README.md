@@ -13,6 +13,7 @@ Minimalistische PWA für Fasten, Schlaf, Training und Gewicht. Läuft ohne Build
 | `js/store.js` | Datenstand im Browser, Speichern, Lösch-Markierungen |
 | `js/sync.js` | Sync über geheimes GitHub-Gist, Export/Import |
 | `js/fast.js`, `sleep.js`, `train.js`, `weight.js` | die vier Bereiche |
+| `js/theme.js` | Dunkelmodus ein/aus (nur für dieses Gerät) |
 | `js/ui.js` | DOM-Helfer und Diagramme |
 | `sw.js` | Offline-Cache – bei jeder Veröffentlichung `VERSION` erhöhen |
 
