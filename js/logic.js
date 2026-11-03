@@ -188,3 +188,21 @@ export function workoutLoads(train, bwFn) {
   }
   return withChange([...m.values()].sort((a, b) => a.t - b.t));
 }
+
+// Vergleich der aktuellen Einheit (heute, sonst die letzte) mit den früheren Einheiten derselben Übung.
+// loads: Ausgabe von loadsByDay (aufsteigend). Prozent = Anteil, z. B. 0,067 für +6,7 %.
+export function compareLoads(loads, today) {
+  if (!loads.length) return null;
+  const cur = loads[loads.length - 1], before = loads.slice(0, -1);
+  const pct = (a, b) => (b > 0 ? a / b - 1 : null);
+  const last = before[before.length - 1] || null;
+  const recent = before.slice(-3), avg = recent.length >= 2 ? recent.reduce((a, l) => a + l.load, 0) / recent.length : null;
+  const best = before.length ? before.reduce((m, l) => (l.load > m.load ? l : m)) : null;
+  return {
+    cur, before, isToday: dayKey(cur.t) === today,
+    last, pctLast: last ? pct(cur.load, last.load) : null,
+    avg, avgN: recent.length, pctAvg: avg ? pct(cur.load, avg) : null,
+    best, pctBest: best ? pct(cur.load, best.load) : null, isBest: !!best && cur.load > best.load,
+    pctVs: l => pct(cur.load, l.load),
+  };
+}

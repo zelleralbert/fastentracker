@@ -1,7 +1,7 @@
-import { state, save, tomb, range } from './store.js';
-import { EXS, BANDS, exById, topSet, byDay, isRecord, suggestNext, bandById, bandKg, bandRange, resistTxt, kgNum, num,
-  fmtDay, dayKey, rangeStart, bodyweightFn, loadOf, loadsByDay, workoutLoads, fmtLoad, fmtPct } from './logic.js';
-import { $, esc, stats, items, lineChart, loadBars } from './ui.js';
+import { state, save, tomb } from './store.js';
+import { EXS, BANDS, exById, byDay, isRecord, suggestNext, bandById, bandKg, bandRange, resistTxt, kgNum, num, plural,
+  fmtDay, dayKey, bodyweightFn, loadsByDay, compareLoads, workoutLoads, fmtLoad, fmtPct } from './logic.js';
+import { $, esc, items, loadBars } from './ui.js';
 import { note as cleanNote } from './merge.js';
 
 const ex = () => exById(state.ex);
@@ -99,37 +99,46 @@ export function renderTrain() {
 
   // Bewegte Last (Näherung): Wiederholungen × (Anteil des Körpergewichts + Band), Körpergewicht aus deinen Gewichtsdaten
   const bwFn = bodyweightFn(state.weight), needsBw = e.bw > 0 && !state.weight.length;
-  const todayLoad = loadOf(todays, e, bwFn);
-  $('tTodayLoad').textContent = needsBw ? 'Trage dein Körpergewicht im Tab Gewicht ein, dann wird die bewegte Last berechnet.'
-    : todayLoad ? `Heute bewegt ≈ ${fmtLoad(todayLoad)}` : '';
+  const loads = loadsByDay(all, e, bwFn), cmp = compareLoads(loads, today);
+  $('tCardNote').textContent = needsBw ? 'Trage dein Körpergewicht im Tab Gewicht ein, dann wird die bewegte Last berechnet.' : '';
 
-  // Fortschritt im gewählten Zeitraum; die Veränderung wird zur jeweils vorigen Einheit berechnet, auch über den Zeitraum hinaus
-  const n = range(), from = rangeStart(Date.now(), n), r = all.filter(x => x.t >= from), days = byDay(r);
-  const loads = loadsByDay(all, e, bwFn), inRange = loads.filter(l => l.t >= from);
-  const total = inRange.reduce((a, l) => a + l.load, 0), lastD = inRange.length ? inRange[inRange.length - 1].d : null;
-  stats($('tStats'), [
-    [days.length || '–', 'Trainingstage'],
-    [total ? '≈ ' + fmtLoad(total) : '–', 'bewegt'],
-    [lastD == null ? '–' : fmtPct(lastD), 'zur Vorgänger-Einheit'],
-  ]);
-  const shownBars = inRange.slice(-14);
-  $('tLoadBars').hidden = $('tLoadLeg').hidden = !shownBars.length;
-  if (shownBars.length) loadBars($('tLoadBars'), shownBars);
+  // Wichtigste Kennzahlen: was ich heute in dieser Übung geleistet habe und wie das zu früheren Einheiten steht
+  $('tCard').hidden = !cmp;
+  if (cmp) {
+    const { cur } = cmp, up = v => v > 0.0005, down = v => v < -0.0005;
+    const arrow = v => (up(v) ? '▲' : down(v) ? '▼' : '■'), cls = v => (up(v) ? 'up' : down(v) ? 'down' : '');
+    $('tCardTitle').textContent = cmp.isToday ? `Heute · ${e.name}` : `Letzte Einheit · ${fmtDay(cur.t)} · ${e.name}`;
+    $('tCardLoad').textContent = `≈ ${fmtLoad(cur.load)}`;
+    const pc = $('tCardPct');
+    pc.textContent = cmp.pctLast == null ? '' : `${arrow(cmp.pctLast)} ${fmtPct(cmp.pctLast)}`;
+    pc.className = 'pct ' + (cmp.pctLast == null ? '' : cls(cmp.pctLast));
+    $('tCardSub').textContent = `${plural(cur.n, 'Satz', 'Sätze')} · ${cur.reps} ${e.unit}` + (cmp.isToday ? ' bisher' : '')
+      + (cmp.last ? ` · zur letzten Einheit (${fmtDay(cmp.last.t)}: ${fmtLoad(cmp.last.load)})` : ' · erste Einheit, noch kein Vergleich');
+    const refs = [];
+    const row = (label, v) => `<div><span>${label}</span><span class="delta ${cls(v)}">${arrow(v)} ${fmtPct(v)}</span></div>`;
+    if (cmp.avg != null) refs.push(row(`Ø letzte ${cmp.avgN} Einheiten (≈ ${fmtLoad(cmp.avg)})`, cmp.pctAvg));
+    if (cmp.best) refs.push(cmp.isBest ? `<div><span>Bisheriger Bestwert (≈ ${fmtLoad(cmp.best.load)})</span><span class="badge">Neuer Bestwert</span></div>`
+      : row(`Bestwert (≈ ${fmtLoad(cmp.best.load)}, ${fmtDay(cmp.best.t)})`, cmp.pctBest));
+    $('tCardRefs').innerHTML = refs.join(''); $('tCardRefs').hidden = !refs.length;
+  }
 
-  const pts = days.map(d => { const b = topSet(d); return { t: b.t, v: b.reps }; });
-  const shown = lineChart($('tChart'), { from, to: Date.now(), series: [{ pts, line: true, dots: true }], unit: e.unit, digits: 0 });
-  $('tChartLbl').textContent = shown ? `Bestes Set pro Tag (${e.unit} beim höchsten Widerstand)` : r.length ? 'Wiederholungs-Verlauf ab dem zweiten Trainingstag im Zeitraum.' : '';
+  // Die letzten Einheiten als Balken (grün = mehr als beim vorigen Mal, orange = weniger)
+  const shownBars = loads.slice(-8);
+  $('tLoadBars').hidden = $('tLoadLeg').hidden = shownBars.length < 2;
+  if (shownBars.length >= 2) loadBars($('tLoadBars'), shownBars);
 
-  items($('tHist'), () => loads.filter(l => l.t >= rangeStart(Date.now(), Math.max(n, 30))).reverse().map(l => {
-    const d = byDay(all).find(x => dayKey(x[0].t) === dayKey(l.t)) || [], notes = d.filter(x => x.n).map(x => esc(x.n));
-    return { html: `${fmtDay(l.t)}<small>${d.map(setTxt).join(' / ')} · ≈ ${fmtLoad(l.load)} ${delta(l.d)}</small>${notes.length ? `<em>${notes.join(' · ')}</em>` : ''}` };
-  }), 'Noch keine Sätze für diese Übung.');
+  // Jede frühere Einheit mit dem Prozentwert, um den die aktuelle darüber (▲) oder darunter (▼) liegt
+  items($('tHist'), () => (cmp ? cmp.before.slice().reverse().slice(0, 20) : []).map(l => {
+    const d = byDay(all).find(x => dayKey(x[0].t) === dayKey(l.t)) || [], v = cmp.pctVs(l);
+    const notes = d.filter(x => x.n).map(x => esc(x.n));
+    return { html: `${fmtDay(l.t)}<small>${d.map(setTxt).join(' / ')} · ≈ ${fmtLoad(l.load)} · ${cmp.isToday ? 'heute' : 'zuletzt'} ${delta(v)}</small>${notes.length ? `<em>${notes.join(' · ')}</em>` : ''}` };
+  }), 'Noch keine früheren Einheiten dieser Übung.');
 
-  // Alle Übungen eines Trainingstags zusammen: so lassen sich die einzelnen Workouts vergleichen
-  const wl = workoutLoads(state.train, bwFn), wIn = wl.filter(l => l.t >= from);
-  $('wkBars').hidden = !wIn.length;
-  if (wIn.length) loadBars($('wkBars'), wIn.slice(-14));
-  items($('wkList'), () => wl.filter(l => l.t >= rangeStart(Date.now(), Math.max(n, 30))).reverse().map(l => ({
+  // Alle Übungen eines Trainingstags zusammen (eingeklappt)
+  const wl = workoutLoads(state.train, bwFn);
+  $('wkBars').hidden = !wl.length;
+  if (wl.length) loadBars($('wkBars'), wl.slice(-14));
+  items($('wkList'), () => wl.slice().reverse().slice(0, 20).map(l => ({
     html: `${fmtDay(l.t)}<small>≈ ${fmtLoad(l.load)} ${delta(l.d)}</small><em>${EXS.filter(x => l.per[x.id]).map(x => `${x.name.replace(/ mit Band$/, '')} ${fmtLoad(l.per[x.id])}`).join(' · ')}</em>`,
   })), 'Noch keine Workouts mit bekanntem Körpergewicht.');
 }

@@ -63,22 +63,23 @@
     <button class="btn primary" id="tSave">Satz speichern</button>
     <div class="toast" id="tMsg" hidden></div>
     <div id="tToday"></div>
-    <div class="fine center" id="tTodayLoad"></div>
+    <div class="card" id="tCard" hidden>
+      <div class="cap" id="tCardTitle"></div>
+      <div class="bigline"><span class="bigv" id="tCardLoad"></span><span class="pct" id="tCardPct"></span></div>
+      <div class="fine" id="tCardSub"></div>
+      <div class="refs" id="tCardRefs"></div>
+    </div>
+    <div class="fine center" id="tCardNote"></div>
 
-    <div class="head"><h2>Fortschritt</h2><div class="seg"></div></div>
-    <div class="stats" id="tStats"></div>
-    <h2 class="sub">Bewegte Last je Einheit</h2>
-    <div class="bars" id="tLoadBars"></div>
-    <div class="legend" id="tLoadLeg"><span><i class="sq" style="background:var(--accent)"></i>mehr als zuletzt</span><span><i class="sq" style="background:var(--warn)"></i>weniger</span><span><i class="sq" style="background:var(--faint)"></i>erste</span></div>
-    <svg class="chart" id="tChart" viewBox="0 0 320 140" hidden></svg>
-    <div class="fine center" id="tChartLbl"></div>
-    <details><summary>Verlauf dieser Übung</summary><div id="tHist"></div></details>
+    <div class="bars" id="tLoadBars" hidden></div>
+    <div class="legend" id="tLoadLeg" hidden><span><i class="sq" style="background:var(--accent)"></i>mehr als zuletzt</span><span><i class="sq" style="background:var(--warn)"></i>weniger</span><span><i class="sq" style="background:var(--faint)"></i>erste</span></div>
 
-    <div class="head"><h2>Workouts im Vergleich</h2></div>
-    <p class="fine" style="margin-top:-6px">Bewegte Last je Trainingstag über alle Übungen.</p>
-    <div class="bars" id="wkBars"></div>
-    <div class="legend"><span><i class="sq" style="background:var(--accent)"></i>mehr als zuletzt</span><span><i class="sq" style="background:var(--warn)"></i>weniger</span><span><i class="sq" style="background:var(--faint)"></i>erste</span></div>
-    <details><summary>Alle Workouts</summary><div id="wkList"></div></details>
+    <details><summary>Früheren Einheiten im Vergleich</summary><div id="tHist"></div></details>
+    <details><summary>Alle Übungen: Workouts im Vergleich</summary>
+      <div class="bars" id="wkBars"></div>
+      <div class="legend"><span><i class="sq" style="background:var(--accent)"></i>mehr als zuletzt</span><span><i class="sq" style="background:var(--warn)"></i>weniger</span><span><i class="sq" style="background:var(--faint)"></i>erste</span></div>
+      <div id="wkList"></div>
+    </details>
   </section>
 
   <!-- Gewicht -->

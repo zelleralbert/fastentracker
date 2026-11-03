@@ -1,6 +1,6 @@
 // Tests für Zusammenführung, Logik und Zusammenfassung. Laufen im Browser über test/index.html.
 import { mergeDocs, sanitize, dayKey, LEGACY_KEYS, BAND_IDS } from '../js/merge.js';
-import { avgClock, movingAvg, suggestNext, isRecord, exById, buckets, rangeStart, endOfDay, bodyweightFn, setLoad, loadOf, fmtLoad, BANDS, bandKg, bandRange, topSet, loadsByDay, workoutLoads, fmtPct, D, H } from '../js/logic.js';
+import { avgClock, movingAvg, suggestNext, isRecord, exById, buckets, rangeStart, endOfDay, bodyweightFn, setLoad, loadOf, fmtLoad, BANDS, bandKg, bandRange, topSet, loadsByDay, workoutLoads, fmtPct, compareLoads, D, H } from '../js/logic.js';
 import { buildSummary } from '../js/summary.js';
 import { analyzeDrift, mainSleeps } from '../js/drift.js';
 import { lineChart } from '../js/ui.js';
@@ -568,6 +568,34 @@ test('Bewegte Last je Einheit: Veränderung zur vorigen Einheit, Workouts über 
   const w = workoutLoads([...chin, ...dips], bw);
   eq(w.map(x => x.load), [29 * 80, 40 * 80, 24 * 80]); eq(Object.keys(w[1].per).sort(), ['chin', 'dips']);
   ok(Math.abs(w[1].d - (40 / 29 - 1)) < 1e-9, 'Veränderung des gesamten Workouts');
+});
+
+test('Vergleich heute gegen frühere Einheiten: letzte, Durchschnitt der letzten drei, Bestwert', () => {
+  const bw = bodyweightFn([{ t: T(1), kg: 80 }]);
+  // Chin-ups: Tag 1: 30 Wdh., Tag 2: 24 Wdh., Tag 3: 27 Wdh., heute (Tag 4): 30 Wdh.  → Last = Wdh. × 80 kg
+  const sets = [[1, [10, 10, 10]], [2, [8, 8, 8]], [3, [9, 9, 9]], [4, [10, 10, 10]]].flatMap(([d, rs]) => rs.map((r, i) => ({ t: T(d, 8, i), ex: 'chin', reps: r, kg: 0 })));
+  const c = compareLoads(loadsByDay(sets, exById('chin'), bw), dayKey(T(4, 20)));
+  eq(c.isToday, true); eq(c.cur.load, 30 * 80);
+  ok(Math.abs(c.pctLast - (30 / 27 - 1)) < 1e-9, 'zur letzten Einheit +11,1 %');
+  eq(c.avgN, 3); ok(Math.abs(c.avg - (30 + 24 + 27) / 3 * 80) < 1e-9, 'Ø der letzten drei Einheiten');
+  ok(Math.abs(c.pctAvg - (30 / 27 - 1)) < 1e-9, 'gegen den Durchschnitt');
+  eq(c.best.load, 30 * 80, 'Bestwert vor heute:'); eq(c.isBest, false, 'gleich dem Bestwert ist kein neuer:'); eq(c.pctBest, 0);
+  ok(Math.abs(c.pctVs(c.before[1]) - (30 / 24 - 1)) < 1e-9, 'gegen eine bestimmte frühere Einheit');
+  // neuer Bestwert
+  const more = [...sets, { t: T(4, 8, 5), ex: 'chin', reps: 5, kg: 0 }];
+  const c2 = compareLoads(loadsByDay(more, exById('chin'), bw), dayKey(T(4, 20)));
+  eq(c2.isBest, true); ok(c2.pctBest > 0, 'über dem bisherigen Bestwert');
+});
+
+test('Vergleich ohne heutige Einheit: die letzte Einheit gegen die davor; erste Einheit ohne Vergleich', () => {
+  const bw = bodyweightFn([{ t: T(1), kg: 80 }]);
+  const mk = (d, rs) => rs.map((r, i) => ({ t: T(d, 8, i), ex: 'dips', reps: r, kg: 0 }));
+  const c = compareLoads(loadsByDay([...mk(1, [10, 10]), ...mk(2, [11, 10])], exById('dips'), bw), dayKey(T(5, 12)));
+  eq(c.isToday, false); eq(c.cur.load, 21 * 80); ok(Math.abs(c.pctLast - (21 / 20 - 1)) < 1e-9);
+  eq(c.avg, null, 'zu wenige Einheiten für einen Durchschnitt:');
+  const first = compareLoads(loadsByDay(mk(1, [10]), exById('dips'), bw), dayKey(T(1, 20)));
+  eq([first.last, first.pctLast, first.best, first.isBest], [null, null, null, false]);
+  eq(compareLoads([], 'x'), null);
 });
 
 /* ---- Zusammenfassung ---- */
