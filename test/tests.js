@@ -615,6 +615,11 @@ test('Bereinigung einer Übung: Sätze weg, Lösch-Markierungen gesetzt, alte Ge
   eq(mergeDocs(later, old).train.map(x => x.ex).sort(), ['bss', 'chin', 'lat'], 'neuer Satz bleibt:');
   eq(purgeExercises(clean, ['bss', 'dead']).removed, 0, 'zweiter Durchlauf entfernt nichts:');
   eq(purgeExercises(old, []).removed, 0);
+  // Mit Bedingung: nur Sätze ohne Band (Lateral Raises vor den Bändern); Sätze mit Band bleiben
+  const lat = doc({ mod: 5, train: [{ t: T(1), ex: 'lat', reps: 20, kg: 0 }, { t: T(2), ex: 'lat', reps: 37, kg: 5 }, { t: T(3), ex: 'lat', reps: 15, kg: 0, b: 'green' }, { t: T(4), ex: 'chin', reps: 8, kg: 0 }] });
+  const r = purgeExercises(lat, ['lat'], T(10), x => !x.b);
+  eq(r.removed, 2); eq(r.doc.train.map(x => x.ex + (x.b || '')), ['latgreen', 'chin'], 'Sätze mit Band bleiben:');
+  eq(Object.keys(r.doc.deleted).sort(), ['t:lat' + T(1), 't:lat' + T(2)]);
 });
 
 /* ---- Zusammenfassung ---- */

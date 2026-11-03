@@ -39,13 +39,18 @@ export const ui = read('tagwerk-ui', {});
 export const saveUi = () => write('tagwerk-ui', ui);
 export const range = () => (RANGES.includes(ui.range) ? ui.range : 7);
 
-// Einmalige Bereinigung auf Wunsch (Version 3.2): Die Sätze von Split Squats und Dead Bugs stammen aus der Zeit vor den
-// Widerstandsbändern und sind nicht vergleichbar. Sie werden einmal pro Gerät gelöscht; der Abgleich bringt die Löschung
-// auf die anderen Geräte und ins Gist. Spätere Sätze dieser Übungen bleiben unberührt.
-const PURGE = { id: 'split-dead-vor-baendern', ex: ['bss', 'dead'] };
+// Einmalige Bereinigungen auf Wunsch: Die Sätze von Split Squats, Dead Bugs und Lateral Raises stammen aus der Zeit vor den
+// Widerstandsbändern und sind nicht vergleichbar. Jede Bereinigung läuft einmal pro Gerät (Merker in `ui.purged`); der Abgleich
+// bringt die Löschung auf die anderen Geräte und ins Gist. Spätere Sätze – bei Lateral Raises alle mit Band – bleiben unberührt.
+const PURGES = [
+  { id: 'split-dead-vor-baendern', ex: ['bss', 'dead'] },
+  { id: 'lat-vor-baendern', ex: ['lat'], only: x => !x.b },
+];
 const donePurges = Array.isArray(ui.purged) ? ui.purged : [];
-if (!donePurges.includes(PURGE.id)) {
-  const { doc, removed } = purgeExercises(state, PURGE.ex);
+for (const p of PURGES) {
+  if (donePurges.includes(p.id)) continue;
+  const { doc, removed } = purgeExercises(state, p.ex, Date.now(), p.only);
   if (removed) { for (const k of Object.keys(state)) delete state[k]; Object.assign(state, doc); write(KEY, state); }
-  ui.purged = [...donePurges, PURGE.id]; saveUi();
+  donePurges.push(p.id);
 }
+ui.purged = donePurges; saveUi();
