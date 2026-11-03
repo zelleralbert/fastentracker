@@ -86,3 +86,13 @@ export function mergeDocs(a, b) {
   out.sleepNow = [base.sleepNow, other.sleepNow].find(sleepAlive) ?? null;
   return sanitize(out);
 }
+
+// Löscht alle Sätze bestimmter Übungen und setzt für jeden eine Lösch-Markierung, damit auch andere Geräte und das Gist sie
+// beim Abgleich verlieren (und ein altes Gerät sie nicht zurückbringt). Neue Sätze danach sind davon nicht betroffen.
+export function purgeExercises(doc, exIds, now = Date.now()) {
+  const d = sanitize(doc), gone = d.train.filter(x => exIds.includes(x.ex));
+  if (!gone.length) return { doc: d, removed: 0 };
+  const deleted = { ...d.deleted };
+  for (const x of gone) deleted[KEYS.train(x)] = now;
+  return { doc: sanitize({ ...d, train: d.train.filter(x => !exIds.includes(x.ex)), deleted, mod: now }), removed: gone.length };
+}

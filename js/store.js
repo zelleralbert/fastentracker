@@ -1,5 +1,5 @@
 import { RANGES } from './logic.js';
-import { sanitize, LEGACY_KEYS } from './merge.js';
+import { sanitize, LEGACY_KEYS, purgeExercises } from './merge.js';
 
 // Zentraler Datenstand. Der Schlüssel bleibt 'fasten-v1', damit bestehende Daten erhalten bleiben.
 export const KEY = 'fasten-v1';
@@ -38,3 +38,14 @@ export const tomb = k => { state.deleted[k] = Date.now(); };
 export const ui = read('tagwerk-ui', {});
 export const saveUi = () => write('tagwerk-ui', ui);
 export const range = () => (RANGES.includes(ui.range) ? ui.range : 7);
+
+// Einmalige Bereinigung auf Wunsch (Version 3.2): Die Sätze von Split Squats und Dead Bugs stammen aus der Zeit vor den
+// Widerstandsbändern und sind nicht vergleichbar. Sie werden einmal pro Gerät gelöscht; der Abgleich bringt die Löschung
+// auf die anderen Geräte und ins Gist. Spätere Sätze dieser Übungen bleiben unberührt.
+const PURGE = { id: 'split-dead-vor-baendern', ex: ['bss', 'dead'] };
+const donePurges = Array.isArray(ui.purged) ? ui.purged : [];
+if (!donePurges.includes(PURGE.id)) {
+  const { doc, removed } = purgeExercises(state, PURGE.ex);
+  if (removed) { for (const k of Object.keys(state)) delete state[k]; Object.assign(state, doc); write(KEY, state); }
+  ui.purged = [...donePurges, PURGE.id]; saveUi();
+}

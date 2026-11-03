@@ -1,5 +1,5 @@
 // Tests für Zusammenführung, Logik und Zusammenfassung. Laufen im Browser über test/index.html.
-import { mergeDocs, sanitize, dayKey, LEGACY_KEYS, BAND_IDS } from '../js/merge.js';
+import { mergeDocs, sanitize, dayKey, LEGACY_KEYS, BAND_IDS, purgeExercises } from '../js/merge.js';
 import { avgClock, movingAvg, suggestNext, isRecord, exById, buckets, rangeStart, endOfDay, bodyweightFn, setLoad, loadOf, fmtLoad, BANDS, bandKg, bandRange, topSet, loadsByDay, workoutLoads, fmtPct, compareLoads, D, H } from '../js/logic.js';
 import { buildSummary } from '../js/summary.js';
 import { analyzeDrift, mainSleeps } from '../js/drift.js';
@@ -596,6 +596,25 @@ test('Vergleich ohne heutige Einheit: die letzte Einheit gegen die davor; erste 
   const first = compareLoads(loadsByDay(mk(1, [10]), exById('dips'), bw), dayKey(T(1, 20)));
   eq([first.last, first.pctLast, first.best, first.isBest], [null, null, null, false]);
   eq(compareLoads([], 'x'), null);
+});
+
+test('Bereinigung einer Übung: Sätze weg, Lösch-Markierungen gesetzt, alte Geräte bringen sie nicht zurück', () => {
+  const old = doc({ mod: 5, train: [
+    { t: T(1), ex: 'bss', reps: 12, kg: 0 }, { t: T(2), ex: 'dead', reps: 15, kg: 0 },
+    { t: T(3), ex: 'chin', reps: 8, kg: 0 }, { t: T(4), ex: 'lat', reps: 15, kg: 0, b: 'green' },
+  ] });
+  const { doc: clean, removed } = purgeExercises(old, ['bss', 'dead'], T(10));
+  eq(removed, 2); eq(clean.train.map(x => x.ex), ['chin', 'lat'], 'andere Übungen bleiben:');
+  eq(Object.keys(clean.deleted).sort(), ['t:bss' + T(1), 't:dead' + T(2)], 'Lösch-Markierungen:'); eq(clean.mod, T(10));
+  // Ein Gerät, das noch die alten Sätze hat, bringt sie über den Abgleich nicht zurück …
+  const m = mergeDocs(clean, old);
+  eq(m.train.map(x => x.ex), ['chin', 'lat']);
+  eq(mergeDocs(old, clean), m, 'Reihenfolge egal:');
+  // … neue Sätze nach der Bereinigung bleiben dagegen erhalten
+  const later = { ...clean, mod: T(11), train: [...clean.train, { t: T(12), ex: 'bss', reps: 10, kg: 0, b: 'yellow' }] };
+  eq(mergeDocs(later, old).train.map(x => x.ex).sort(), ['bss', 'chin', 'lat'], 'neuer Satz bleibt:');
+  eq(purgeExercises(clean, ['bss', 'dead']).removed, 0, 'zweiter Durchlauf entfernt nichts:');
+  eq(purgeExercises(old, []).removed, 0);
 });
 
 /* ---- Zusammenfassung ---- */
