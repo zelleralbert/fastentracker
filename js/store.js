@@ -40,11 +40,12 @@ export const saveUi = () => write('tagwerk-ui', ui);
 export const range = () => (RANGES.includes(ui.range) ? ui.range : 7);
 
 // Einmalige Bereinigungen auf Wunsch: Die Sätze von Split Squats, Dead Bugs und Lateral Raises stammen aus der Zeit vor den
-// Widerstandsbändern und sind nicht vergleichbar. Jede Bereinigung läuft einmal pro Gerät (Merker in `ui.purged`); der Abgleich
+// Widerstandsbändern und sind nicht vergleichbar; Neck Bridge wurde ganz entfernt. Jede Bereinigung läuft einmal pro Gerät (Merker in `ui.purged`); der Abgleich
 // bringt die Löschung auf die anderen Geräte und ins Gist. Spätere Sätze – bei Lateral Raises alle mit Band – bleiben unberührt.
 const PURGES = [
   { id: 'split-dead-vor-baendern', ex: ['bss', 'dead'] },
   { id: 'lat-vor-baendern', ex: ['lat'], only: x => !x.b },
+  { id: 'neck-bridge-entfernt', ex: ['neck'] },   // Neck Bridge gibt es nicht mehr
 ];
 const donePurges = Array.isArray(ui.purged) ? ui.purged : [];
 for (const p of PURGES) {
