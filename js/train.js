@@ -1,5 +1,5 @@
 import { state, save, tomb, range } from './store.js';
-import { EXS, exById, topSet, byDay, isRecord, suggestNext, kgNum, fmtDay, dayKey, rangeStart } from './logic.js';
+import { EXS, exById, topSet, byDay, isRecord, suggestNext, kgNum, fmtDay, dayKey, rangeStart, bodyweightFn, loadOf, fmtLoad } from './logic.js';
 import { $, esc, stats, items, lineChart } from './ui.js';
 import { note as cleanNote } from './merge.js';
 
@@ -68,11 +68,18 @@ export function renderTrain() {
   })), '');
   if (!todays.length) $('tToday').innerHTML = '';
 
+  // Bewegte Last (Näherung): Wiederholungen × Körpergewicht × Anteil der Übung, aus deinen Gewichtsdaten
+  const bwFn = bodyweightFn(state.weight), canLoad = !e.isometric, needsBw = canLoad && e.bw > 0 && !state.weight.length;
+  const todayLoad = canLoad ? loadOf(todays, e, bwFn) : null;
+  $('tTodayLoad').textContent = needsBw ? 'Trage dein Körpergewicht im Tab Gewicht ein, dann wird die bewegte Last berechnet.'
+    : todayLoad ? `Heute bewegt ≈ ${fmtLoad(todayLoad)}` : '';
+
   // Fortschritt im gewählten Zeitraum
   const n = range(), from = rangeStart(Date.now(), n), r = all.filter(x => x.t >= from), days = byDay(r), best = topSet(r);
+  const rangeLoad = canLoad ? loadOf(r, e, bwFn) : null;
   stats($('tStats'), [
     [days.length || '–', 'Trainingstage'],
-    [r.length || '–', 'Sätze'],
+    canLoad ? [rangeLoad ? '≈ ' + fmtLoad(rangeLoad) : '–', 'bewegt'] : [r.length || '–', 'Sätze'],
     [best ? setTxt(best) : '–', 'Bestes Set'],
   ]);
   const pts = days.map(d => { const b = topSet(d); return { t: b.t, v: b.reps }; });
@@ -80,7 +87,7 @@ export function renderTrain() {
   $('tChartLbl').textContent = shown ? `Bestes Set pro Tag (${e.unit} beim höchsten Gewicht)` : r.length ? 'Verlauf ab dem zweiten Trainingstag im Zeitraum.' : '';
 
   items($('tHist'), () => byDay(all.filter(x => x.t >= rangeStart(Date.now(), Math.max(n, 30)))).reverse().map(d => {
-    const notes = d.filter(x => x.n).map(x => esc(x.n));
-    return { html: `${fmtDay(d[0].t)}<small>${d.map(setTxt).join(' / ')} ${e.unit}</small>${notes.length ? `<em>${notes.join(' · ')}</em>` : ''}` };
+    const notes = d.filter(x => x.n).map(x => esc(x.n)), load = canLoad ? loadOf(d, e, bwFn) : null;
+    return { html: `${fmtDay(d[0].t)}<small>${d.map(setTxt).join(' / ')} ${e.unit}${load ? ` · ≈ ${fmtLoad(load)}` : ''}</small>${notes.length ? `<em>${notes.join(' · ')}</em>` : ''}` };
   }), 'Noch keine Sätze für diese Übung.');
 }

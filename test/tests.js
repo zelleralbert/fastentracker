@@ -1,6 +1,6 @@
 // Tests für Zusammenführung, Logik und Zusammenfassung. Laufen im Browser über test/index.html.
 import { mergeDocs, sanitize, dayKey, LEGACY_KEYS } from '../js/merge.js';
-import { avgClock, movingAvg, suggestNext, isRecord, exById, buckets, rangeStart, endOfDay, D, H } from '../js/logic.js';
+import { avgClock, movingAvg, suggestNext, isRecord, exById, buckets, rangeStart, endOfDay, bodyweightFn, setLoad, loadOf, fmtLoad, D, H } from '../js/logic.js';
 import { buildSummary } from '../js/summary.js';
 import { analyzeDrift, mainSleeps } from '../js/drift.js';
 import { lineChart } from '../js/ui.js';
@@ -473,6 +473,45 @@ test('Diagramm: Messpunkte liegen genau auf ihrer Verbindungslinie, der Trend is
   dots.forEach((c, i) => eq(`${c.getAttribute('cx')},${c.getAttribute('cy')}`, verts[i], `Punkt ${i}:`));
   ok(lines[0].classList.contains('faint') && !lines[1].classList.contains('faint'), 'Messlinie dünn, Trend kräftig');
   ok(lines[1].getAttribute('points') !== lines[0].getAttribute('points'), 'Trend weicht von den Messwerten ab');
+});
+
+/* ---- Bewegte Last bei Übungen mit dem Körpergewicht ---- */
+test('Körpergewicht am Trainingstag: Trend der letzten Messung, gleiche Tagesmessung zählt, davor die erste', () => {
+  const bw = bodyweightFn([{ t: T(3), kg: 84 }, { t: T(1), kg: 80 }, { t: T(2), kg: 82 }]);   // unsortiert
+  eq(bw(T(1, 7)), 80, 'Messung am selben Tag:');
+  eq(bw(T(2, 7)), 81, 'Trend am zweiten Tag (Ø 80, 82):');
+  eq(bw(T(0, 7)), 80, 'vor der ersten Messung:');
+  eq(bw(T(9)), 82, 'nach der letzten Messung:');
+  eq(bodyweightFn([])(T(1)), null, 'ohne Messungen:');
+});
+
+test('Bewegte Last pro Satz: Anteil des Körpergewichts, Zusatzgewicht, Hanteln, Halteübung', () => {
+  const set = (reps, kg = 0) => ({ reps, kg });
+  eq(setLoad(set(10), exById('chin'), 85), 850);
+  eq(setLoad(set(10), exById('dips'), 85), 765);
+  eq(Math.round(setLoad(set(12), exById('bss'), 85)), 867);
+  eq(setLoad(set(10, 10), exById('chin'), 85), 950, 'Zusatzgewicht:');
+  eq(setLoad(set(15, 5), exById('lat'), 85), 150, 'zwei Kurzhanteln à 5 kg:');
+  eq(setLoad(set(45), exById('neck'), 85), 0, 'Halteübung ohne Bewegung:');
+  eq(setLoad(set(10), exById('chin'), null), null, 'ohne Körpergewicht:');
+  eq(setLoad(set(15, 5), exById('lat'), null), 150, 'Hanteln brauchen kein Körpergewicht:');
+});
+
+test('Bewegte Last: Summe über Sätze mit dem jeweils gültigen Körpergewicht', () => {
+  const bw = bodyweightFn([{ t: T(1), kg: 80 }, { t: T(5), kg: 90 }].map(w => ({ ...w })));
+  // Trend am 5. Tag: Ø(80, 90) = 85
+  const sets = [{ t: T(1, 8), reps: 10, kg: 0 }, { t: T(5, 8), reps: 10, kg: 0 }];
+  eq(loadOf(sets, exById('chin'), bw), 10 * 80 + 10 * 85);
+  eq(loadOf(sets, exById('chin'), bodyweightFn([])), null, 'keine Gewichtsdaten:');
+  eq(loadOf([], exById('chin'), bw), null, 'keine Sätze:');
+  eq(fmtLoad(870), '870 kg'); eq(fmtLoad(12345), '12,3 t');
+});
+
+test('Zusammenfassung für Claude enthält die bewegte Last', () => {
+  const md = buildSummary(sanitize({ weight: [{ t: T(19), kg: 85 }], train: [{ t: T(19, 18), ex: 'chin', reps: 10, kg: 0 }, { t: T(19, 18, 5), ex: 'neck', reps: 45, kg: 0 }] }), T(19, 20));
+  ok(md.includes('Bewegte Last (≈)'), 'Spaltenkopf');
+  ok(/\| Chin-ups \|[^\n]*\| 850 kg \|/.test(md), 'Chin-ups 850 kg: ' + md.split('\n').find(l => l.includes('Chin-ups')));
+  ok(/\| Neck Bridge \|[^\n]*\| – \|/.test(md), 'Neck Bridge ohne Wert');
 });
 
 /* ---- Zusammenfassung ---- */

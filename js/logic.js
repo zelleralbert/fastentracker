@@ -80,13 +80,17 @@ export function movingAvg(points, days = 7) {
 }
 
 /* ---- Training ---- */
+// bw = Anteil des Körpergewichts, der bei einer Wiederholung bewegt wird (Näherung aus der Biomechanik):
+// Chin-ups hängen mit dem ganzen Körper, bei Dips trägt der Oberkörper den Großteil, beim Bulgarian Split Squat
+// das vordere Bein, bei Dead Bugs bewegen sich nur Arm und Bein. pair = Zusatzgewicht gilt für zwei Hände (Kurzhanteln).
+// isometric = Halteübung ohne Bewegung, dafür gibt es keine bewegte Last.
 export const EXS = [
-  { id: 'chin', name: 'Chin-ups', hint: '0 kg = Körpergewicht', unit: 'Wdh.' },
-  { id: 'dips', name: 'Dips', hint: '0 kg = Körpergewicht', unit: 'Wdh.' },
-  { id: 'bss', name: 'Bulgarian Split Squats', hint: 'Wiederholungen pro Bein', unit: 'Wdh.' },
-  { id: 'lat', name: 'Lateral Raises', hint: 'Gewicht pro Kurzhantel', unit: 'Wdh.' },
-  { id: 'neck', name: 'Neck Bridge', hint: 'Haltedauer in Sekunden', unit: 'Sek.', inc: 5 },
-  { id: 'dead', name: 'Dead Bugs', hint: 'Wiederholungen pro Seite', unit: 'Wdh.' },
+  { id: 'chin', name: 'Chin-ups', hint: '0 kg = Körpergewicht', unit: 'Wdh.', bw: 1 },
+  { id: 'dips', name: 'Dips', hint: '0 kg = Körpergewicht', unit: 'Wdh.', bw: 0.9 },
+  { id: 'bss', name: 'Bulgarian Split Squats', hint: 'Wiederholungen pro Bein', unit: 'Wdh.', bw: 0.85 },
+  { id: 'lat', name: 'Lateral Raises', hint: 'Gewicht pro Kurzhantel', unit: 'Wdh.', bw: 0, pair: true },
+  { id: 'neck', name: 'Neck Bridge', hint: 'Haltedauer in Sekunden', unit: 'Sek.', inc: 5, bw: 0, isometric: true },
+  { id: 'dead', name: 'Dead Bugs', hint: 'Wiederholungen pro Seite', unit: 'Wdh.', bw: 0.2 },
 ];
 export const exById = id => EXS.find(e => e.id === id) || EXS[0];
 
@@ -116,3 +120,31 @@ export function suggestNext(sets, ex, now = Date.now()) {
   const nx = r.slice(); nx[nx.lastIndexOf(Math.min(...nx))] += ex.inc || 1; // bei Gleichstand der letzte (müdeste) Satz
   return { ...res, next: nx.join(' / ') + kgTxt(kg), reps: nx[0], kg };
 }
+
+/* ---- Bewegte Last ---- */
+// Körpergewicht zu einem Zeitpunkt: 7-Tage-Trend der letzten Messung bis zu diesem Tag (eine Messung am selben Tag zählt mit);
+// liegt der Zeitpunkt vor der ersten Messung, gilt die erste. Ohne Messungen null.
+export function bodyweightFn(weights) {
+  const pts = movingAvg([...weights].sort((a, b) => a.t - b.t).map(w => ({ t: w.t, v: w.kg })));
+  return t => {
+    if (!pts.length) return null;
+    let lo = 0, hi = pts.length - 1, ans = 0;
+    while (lo <= hi) { const m = (lo + hi) >> 1; if (pts[m].t <= t + 12 * H) { ans = m; lo = m + 1; } else hi = m - 1; }
+    return pts[ans].v;
+  };
+}
+
+// Bewegte Last eines Satzes in kg: Wiederholungen × (Anteil des Körpergewichts + Zusatzgewicht). Null, wenn das Körpergewicht fehlt.
+export function setLoad(set, ex, bw) {
+  if (ex.isometric) return 0;
+  const body = ex.bw ? (bw == null ? null : ex.bw * bw) : 0;
+  return body == null ? null : set.reps * (body + set.kg * (ex.pair ? 2 : 1));
+}
+// Summe über mehrere Sätze (null, wenn bei keinem Satz das Körpergewicht bekannt ist)
+export function loadOf(sets, ex, bwFn) {
+  let sum = 0, known = false;
+  for (const x of sets) { const l = setLoad(x, ex, bwFn(x.t)); if (l != null) { sum += l; known = true; } }
+  return known ? sum : null;
+}
+// „870 kg“ bzw. „12,3 t“
+export const fmtLoad = kg => (kg >= 10000 ? `${num(kg / 1000, 1)} t` : `${num(kg, 0)} kg`);
