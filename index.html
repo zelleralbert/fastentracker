@@ -53,10 +53,11 @@
     <div class="suggest" id="tSuggest" hidden></div>
     <div class="inline">
       <input class="field" type="number" id="tReps" min="1" max="3600" inputmode="numeric" placeholder="Wdh.">
-      <span>×</span>
+      <span id="tTimes">×</span>
       <input class="field" type="number" id="tKg" min="0" max="500" step="0.5" inputmode="decimal" placeholder="0">
-      <span>kg</span>
+      <span id="tKgLbl">kg</span>
     </div>
+    <div class="bandrow" id="tBands" role="group" aria-label="Widerstandsband" hidden></div>
     <input class="field" id="tNote" maxlength="140" placeholder="Notiz (optional)" autocomplete="off">
     <div class="fine center" id="tHint"></div>
     <button class="btn primary" id="tSave">Satz speichern</button>
@@ -66,9 +67,18 @@
 
     <div class="head"><h2>Fortschritt</h2><div class="seg"></div></div>
     <div class="stats" id="tStats"></div>
+    <h2 class="sub">Bewegte Last je Einheit</h2>
+    <div class="bars" id="tLoadBars"></div>
+    <div class="legend" id="tLoadLeg"><span><i class="sq" style="background:var(--accent)"></i>mehr als zuletzt</span><span><i class="sq" style="background:var(--warn)"></i>weniger</span><span><i class="sq" style="background:var(--faint)"></i>erste</span></div>
     <svg class="chart" id="tChart" viewBox="0 0 320 140" hidden></svg>
     <div class="fine center" id="tChartLbl"></div>
-    <details><summary>Verlauf</summary><div id="tHist"></div></details>
+    <details><summary>Verlauf dieser Übung</summary><div id="tHist"></div></details>
+
+    <div class="head"><h2>Workouts im Vergleich</h2></div>
+    <p class="fine" style="margin-top:-6px">Bewegte Last je Trainingstag über alle Übungen.</p>
+    <div class="bars" id="wkBars"></div>
+    <div class="legend"><span><i class="sq" style="background:var(--accent)"></i>mehr als zuletzt</span><span><i class="sq" style="background:var(--warn)"></i>weniger</span><span><i class="sq" style="background:var(--faint)"></i>erste</span></div>
+    <details><summary>Alle Workouts</summary><div id="wkList"></div></details>
   </section>
 
   <!-- Gewicht -->

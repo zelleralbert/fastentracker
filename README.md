@@ -29,4 +29,4 @@ Dann `http://localhost:8765/test/` aufrufen.
 
 ## Datenformat (`fastentracker.json`)
 
-Zeiten in Unix-Millisekunden. `sleep` = Nächte (`bed`, `wake`), `weight` (`t`, `kg`), `train` (`t`, `ex`, `reps`, `kg`, optional `n` = Notiz; bei `neck` sind `reps` Sekunden). `deleted` enthält Lösch-Markierungen für den Sync.
+Zeiten in Unix-Millisekunden. `sleep` = Nächte (`bed`, `wake`), `weight` (`t`, `kg`), `train` (`t`, `ex`, `reps`, `kg`, optional `b` = Widerstandsband, optional `n` = Notiz; `neck` = ausgeblendete frühere Übung). `deleted` enthält Lösch-Markierungen für den Sync.

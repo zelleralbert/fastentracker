@@ -3,7 +3,11 @@
 export const pad = n => String(n).padStart(2, '0');
 export const dayKey = t => { const d = new Date(t); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
 
-export const EX_IDS = ['chin', 'dips', 'bss', 'lat', 'neck', 'dead'];
+export const EX_IDS = ['chin', 'dips', 'bss', 'lat', 'dead'];
+// Neck Bridge gibt es nicht mehr in der Auswahl; bereits gespeicherte Sätze bleiben aber erhalten (werden nur nicht angezeigt).
+const LEGACY_EX = ['neck'];
+// Widerstandsbänder (Farben wie auf dem Produktbild)
+export const BAND_IDS = ['blue', 'green', 'purple', 'yellow', 'red', 'black'];
 const num = v => typeof v === 'number' && Number.isFinite(v);
 const inRange = (v, lo, hi) => num(v) && v >= lo && v <= hi;
 // Zeitpunkte: 2000 bis 2100. Alles andere (z. B. 1e20) würde beim Formatieren eine Ausnahme auslösen und einen Bereich lahmlegen.
@@ -43,8 +47,8 @@ export function sanitize(d) {
     sleepNow: isTime(d.sleepNow) ? d.sleepNow : null,
     weight: list(d.weight, x => isTime(x.t) && inRange(x.kg, 20, 400)
       ? { t: x.t, kg: x.kg, ...(num(x.u) ? { u: x.u } : {}) } : null),
-    train: list(d.train, x => isTime(x.t) && EX_IDS.includes(x.ex) && inRange(x.reps, 1, 3600) && inRange(x.kg, 0, 500)
-      ? { t: x.t, ex: x.ex, reps: x.reps, kg: x.kg, ...(note(x.n) ? { n: note(x.n) } : {}) } : null),
+    train: list(d.train, x => isTime(x.t) && (EX_IDS.includes(x.ex) || LEGACY_EX.includes(x.ex)) && inRange(x.reps, 1, 3600) && inRange(x.kg, 0, 500)
+      ? { t: x.t, ex: x.ex, reps: x.reps, kg: x.kg, ...(BAND_IDS.includes(x.b) ? { b: x.b } : {}), ...(note(x.n) ? { n: note(x.n) } : {}) } : null),
     ex: EX_IDS.includes(d.ex) ? d.ex : 'chin',
     deleted,
     mod: num(d.mod) && d.mod > 0 ? d.mod : 0,

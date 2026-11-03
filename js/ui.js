@@ -1,5 +1,5 @@
 // Kleine DOM-Helfer und Diagramme.
-import { num, fmtShort } from './logic.js';
+import { num, fmtShort, fmtPct, fmtLoad } from './logic.js';
 
 export const $ = id => document.getElementById(id);
 // toggle-Ereignisse blubbern nicht, daher in der Capture-Phase abfangen
@@ -90,4 +90,16 @@ export function actogram(svg, { starts, nRows, todayIdx, sleeps, predicted = [] 
   svg.setAttribute('viewBox', `0 0 320 ${H}`);
   svg.innerHTML = out;
   svg.removeAttribute('hidden');
+}
+
+// Balken je Trainingseinheit zum Vergleichen: grün = mehr bewegt als beim vorigen Mal, orange = weniger, grau = erste Einheit.
+// items: [{t, load, d}] (d = Veränderung zur vorigen Einheit); bei wenigen Einheiten steht der Wert über dem Balken.
+export function loadBars(el, items) {
+  const top = Math.max(...items.map(i => i.load), 1), showVal = items.length <= 10;
+  el.classList.toggle('val', showVal);
+  el.innerHTML = items.map(i => {
+    const cls = i.d == null ? 'first' : i.d < -0.0005 ? 'low' : '';
+    const h = Math.max(4, i.load / top * 100);
+    return `<div title="${fmtShort(i.t)}: ${fmtLoad(i.load)}${i.d == null ? '' : ' (' + fmtPct(i.d) + ')'}">${showVal ? `<b>${i.load >= 1000 ? num(i.load / 1000, 1) + ' t' : num(i.load, 0)}</b>` : ''}<i class="${cls}" style="height:${h}%"></i><span>${fmtShort(i.t).slice(0, 5)}</span></div>`;
+  }).join('');
 }

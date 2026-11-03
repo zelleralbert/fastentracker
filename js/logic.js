@@ -81,44 +81,63 @@ export function movingAvg(points, days = 7) {
 
 /* ---- Training ---- */
 // bw = Anteil des Körpergewichts, der bei einer Wiederholung bewegt wird (Näherung aus der Biomechanik):
-// Chin-ups hängen mit dem ganzen Körper, bei Dips trägt der Oberkörper den Großteil, beim Bulgarian Split Squat
-// das vordere Bein, bei Dead Bugs bewegen sich nur Arm und Bein. pair = Zusatzgewicht gilt für zwei Hände (Kurzhanteln).
-// isometric = Halteübung ohne Bewegung, dafür gibt es keine bewegte Last.
+// Chin-ups und Dips bewegen den ganzen Körper (100 %), beim Split Squat trägt das vordere Bein den Großteil,
+// bei Dead Bugs bewegen sich nur Arm und Bein. band = Übung mit Widerstandsband (zählt zusätzlich zum Körpergewicht).
+// pair = Zusatzgewicht (ältere Einträge) gilt für zwei Hände (Kurzhanteln).
 export const EXS = [
   { id: 'chin', name: 'Chin-ups', hint: '0 kg = Körpergewicht', unit: 'Wdh.', bw: 1 },
-  { id: 'dips', name: 'Dips', hint: '0 kg = Körpergewicht', unit: 'Wdh.', bw: 0.9 },
-  { id: 'bss', name: 'Bulgarian Split Squats', hint: 'Wiederholungen pro Bein', unit: 'Wdh.', bw: 0.85 },
-  { id: 'lat', name: 'Lateral Raises', hint: 'Gewicht pro Kurzhantel', unit: 'Wdh.', bw: 0, pair: true },
-  { id: 'neck', name: 'Neck Bridge', hint: 'Haltedauer in Sekunden', unit: 'Sek.', inc: 5, bw: 0, isometric: true },
-  { id: 'dead', name: 'Dead Bugs', hint: 'Wiederholungen pro Seite', unit: 'Wdh.', bw: 0.2 },
+  { id: 'dips', name: 'Dips', hint: '0 kg = Körpergewicht', unit: 'Wdh.', bw: 1 },
+  { id: 'bss', name: 'Split Squats mit Band', hint: 'Wiederholungen pro Bein', unit: 'Wdh.', bw: 0.85, band: true },
+  { id: 'lat', name: 'Lateral Raises mit Band', hint: 'Wiederholungen', unit: 'Wdh.', bw: 0, band: true, pair: true },
+  { id: 'dead', name: 'Dead Bugs mit Band', hint: 'Wiederholungen pro Seite', unit: 'Wdh.', bw: 0.2, band: true },
 ];
 export const exById = id => EXS.find(e => e.id === id) || EXS[0];
 
-// Bestes Set: höchstes Gewicht, bei Gleichstand mehr Wiederholungen/Sekunden
-export const topSet = sets => sets.reduce((b, x) => !b || x.kg > b.kg || (x.kg === b.kg && x.reps > b.reps) ? x : b, null);
+// Widerstandsbänder laut Produktbild (Angaben dort in lbs, hier in kg umgerechnet). Die Spannung hängt von der Dehnung ab;
+// gerechnet wird mit der Mitte des Bereichs. Schwarz ist im Bild abgeschnitten (60–170 lbs angenommen).
+const LB = 0.45359237;
+export const BANDS = [
+  { id: 'blue', name: 'Blau', lbs: [15, 25], color: '#3b82f6' },
+  { id: 'green', name: 'Grün', lbs: [20, 35], color: '#22c55e' },
+  { id: 'purple', name: 'Lila', lbs: [30, 50], color: '#a855f7' },
+  { id: 'yellow', name: 'Gelb', lbs: [40, 80], color: '#eab308' },
+  { id: 'red', name: 'Rot', lbs: [50, 125], color: '#ef4444' },
+  { id: 'black', name: 'Schwarz', lbs: [60, 170], color: '#6b7280' },
+].map(b => ({ ...b, kg: b.lbs.map(v => v * LB), mid: (b.lbs[0] + b.lbs[1]) / 2 * LB }));
+export const bandById = id => BANDS.find(b => b.id === id);
+export const bandKg = id => (bandById(id) ? bandById(id).mid : 0);
+export const bandRange = id => { const b = bandById(id); return b ? `${Math.round(b.kg[0])}–${Math.round(b.kg[1])} kg` : ''; };
+// Zusätzlicher Widerstand eines Satzes in kg (Zusatzgewicht plus Band), ohne Körpergewicht
+export const level = x => x.kg + bandKg(x.b);
+const lv = x => Math.round(level(x) * 100) / 100;
+
+// Bestes Set: höchster Zusatzwiderstand, bei Gleichstand mehr Wiederholungen
+export const topSet = sets => sets.reduce((b, x) => !b || lv(x) > lv(b) || (lv(x) === lv(b) && x.reps > b.reps) ? x : b, null);
 export function byDay(sets) {
   const m = new Map();
   for (const x of sets) { const k = dayKey(x.t); if (!m.has(k)) m.set(k, []); m.get(k).push(x); }
   return [...m.values()];
 }
-export const isRecord = (prev, reps, kg) => prev.length > 0 && !prev.some(x => x.kg > kg || (x.kg === kg && x.reps >= reps));
+export const isRecord = (prev, reps, lvl) => prev.length > 0 && !prev.some(x => lv(x) > lvl + 1e-9 || (Math.abs(lv(x) - lvl) < 1e-9 && x.reps >= reps));
 
-// Vorschlag für heute auf Basis der letzten Einheit (vor heute): Das Gewicht bleibt gleich, nur die Wiederholungen
-// steigen – der schwächste Satz (bei Gleichstand der letzte) um eine Wiederholung bzw. 5 Sekunden.
+// Text für Zusatzgewicht und Band eines Satzes (z. B. „ · 5 kg · Gelb“)
+export const resistTxt = x => `${x.kg > 0 ? ` · ${kgNum(x.kg)} kg` : ''}${x.b && bandById(x.b) ? ` · ${bandById(x.b).name}` : ''}`;
+
+// Vorschlag für heute auf Basis der letzten Einheit (vor heute): Gewicht und Band bleiben gleich, nur die Wiederholungen
+// steigen – der schwächste Satz (bei Gleichstand der letzte) um eine Wiederholung.
 export function suggestNext(sets, ex, now = Date.now()) {
   const today = dayKey(now);
   const days = byDay(sets.filter(x => dayKey(x.t) !== today));
   if (!days.length) return null;
   const last = days[days.length - 1];
-  // Arbeitsgewicht = schwerstes Gewicht mit mindestens zwei Sätzen (ein einzelner Test-Satz bestimmt den Vorschlag nicht)
-  const count = k => last.filter(x => x.kg === k).length;
-  const kgs = [...new Set(last.map(x => x.kg))];
-  const kg = Math.max(...(kgs.filter(k => count(k) >= 2).length ? kgs.filter(k => count(k) >= 2) : kgs));
-  const r = last.filter(x => x.kg === kg).map(x => x.reps);
-  const kgTxt = k => k > 0 ? ` · ${kgNum(k)} kg` : '';
-  const res = { day: last[0].t, last: r.join(' / ') + kgTxt(kg) };
+  // Arbeitswiderstand = stärkster Widerstand mit mindestens zwei Sätzen (ein einzelner Test-Satz bestimmt den Vorschlag nicht)
+  const count = k => last.filter(x => lv(x) === k).length;
+  const lvls = [...new Set(last.map(lv))], multi = lvls.filter(k => count(k) >= 2);
+  const top = Math.max(...(multi.length ? multi : lvls));
+  const grp = last.filter(x => lv(x) === top), ref = grp[grp.length - 1];
+  const r = grp.map(x => x.reps);
   const nx = r.slice(); nx[nx.lastIndexOf(Math.min(...nx))] += ex.inc || 1; // bei Gleichstand der letzte (müdeste) Satz
-  return { ...res, next: nx.join(' / ') + kgTxt(kg), reps: nx[0], kg };
+  return { day: last[0].t, last: r.join(' / ') + resistTxt(ref), next: nx.join(' / ') + resistTxt(ref), reps: nx[0], kg: ref.kg, band: ref.b || '' };
 }
 
 /* ---- Bewegte Last ---- */
@@ -134,11 +153,11 @@ export function bodyweightFn(weights) {
   };
 }
 
-// Bewegte Last eines Satzes in kg: Wiederholungen × (Anteil des Körpergewichts + Zusatzgewicht). Null, wenn das Körpergewicht fehlt.
+// Bewegte Last eines Satzes in kg: Wiederholungen × (Anteil des Körpergewichts + Zusatzgewicht + Band).
+// Null, wenn das Körpergewicht fehlt und die Übung es braucht.
 export function setLoad(set, ex, bw) {
-  if (ex.isometric) return 0;
   const body = ex.bw ? (bw == null ? null : ex.bw * bw) : 0;
-  return body == null ? null : set.reps * (body + set.kg * (ex.pair ? 2 : 1));
+  return body == null ? null : set.reps * (body + set.kg * (ex.pair ? 2 : 1) + (ex.band ? bandKg(set.b) : 0));
 }
 // Summe über mehrere Sätze (null, wenn bei keinem Satz das Körpergewicht bekannt ist)
 export function loadOf(sets, ex, bwFn) {
@@ -148,3 +167,24 @@ export function loadOf(sets, ex, bwFn) {
 }
 // „870 kg“ bzw. „12,3 t“
 export const fmtLoad = kg => (kg >= 10000 ? `${num(kg / 1000, 1)} t` : `${num(kg, 0)} kg`);
+// Veränderung gegenüber der vorigen Einheit: „+6,7 %“, „−3,2 %“
+export const fmtPct = d => (d == null ? '–' : `${d > 0.0005 ? '+' : d < -0.0005 ? '−' : '±'}${num(Math.abs(d) * 100, 1)} %`);
+
+// Jede Einheit bekommt die Veränderung d (Anteil, z. B. 0,067) gegenüber der vorigen; die erste hat null.
+export const withChange = list => list.map((x, i) => ({ ...x, d: i && list[i - 1].load > 0 ? x.load / list[i - 1].load - 1 : null }));
+// Bewegte Last je Trainingstag für eine Übung: [{t, load, reps, n, d}]
+export function loadsByDay(sets, ex, bwFn) {
+  return withChange(byDay(sets).map(d => ({ t: d[0].t, load: loadOf(d, ex, bwFn), reps: d.reduce((a, x) => a + x.reps, 0), n: d.length }))
+    .filter(x => x.load != null && x.load > 0));
+}
+// Bewegte Last je Trainingstag über alle Übungen: [{t, load, per:{übung: kg}, d}]
+export function workoutLoads(train, bwFn) {
+  const m = new Map();
+  for (const x of train) {
+    const ex = EXS.find(e => e.id === x.ex); if (!ex) continue;              // ausgeblendete Übungen (z. B. Neck Bridge) zählen nicht
+    const l = setLoad(x, ex, bwFn(x.t)); if (l == null) continue;
+    const k = dayKey(x.t), o = m.get(k) || { t: x.t, load: 0, per: {} };
+    o.load += l; o.per[ex.id] = (o.per[ex.id] || 0) + l; m.set(k, o);
+  }
+  return withChange([...m.values()].sort((a, b) => a.t - b.t));
+}

@@ -1,6 +1,6 @@
 // Tests für Zusammenführung, Logik und Zusammenfassung. Laufen im Browser über test/index.html.
-import { mergeDocs, sanitize, dayKey, LEGACY_KEYS } from '../js/merge.js';
-import { avgClock, movingAvg, suggestNext, isRecord, exById, buckets, rangeStart, endOfDay, bodyweightFn, setLoad, loadOf, fmtLoad, D, H } from '../js/logic.js';
+import { mergeDocs, sanitize, dayKey, LEGACY_KEYS, BAND_IDS } from '../js/merge.js';
+import { avgClock, movingAvg, suggestNext, isRecord, exById, buckets, rangeStart, endOfDay, bodyweightFn, setLoad, loadOf, fmtLoad, BANDS, bandKg, bandRange, topSet, loadsByDay, workoutLoads, fmtPct, D, H } from '../js/logic.js';
 import { buildSummary } from '../js/summary.js';
 import { analyzeDrift, mainSleeps } from '../js/drift.js';
 import { lineChart } from '../js/ui.js';
@@ -170,7 +170,7 @@ function simulate(seed) {
     d => { if (d.sleepNow) return false; d.sleepNow = clock; },
     d => { if (d.sleepNow == null || clock - d.sleepNow < 11 * 60000) return false; const x = { bed: d.sleepNow, wake: clock }; d.sleep.push(x); added.sleep.add('s:' + x.bed); d.sleepNow = null; },
     d => { if (d.sleepNow == null) return false; del(d, 's:' + d.sleepNow); d.sleepNow = null; },
-    d => { d.ex = pick(['chin', 'dips', 'neck']); },
+    d => { d.ex = pick(['chin', 'dips', 'dead']); },
   ];
   const sync = i => { const m = remote ? mergeDocs(dev[i], remote) : sanitize(dev[i]); dev[i] = m; remote = m; };
 
@@ -242,11 +242,6 @@ test('Vorschlag: auch bei sehr vielen Wiederholungen bleibt das Gewicht gleich, 
   const w = [12, 13, 12].map((r, i) => ({ t: T(18, 18, i), ex: 'lat', reps: r, kg: 5 }));
   const s = suggestNext(w, exById('lat'), T(20));
   eq(s.kg, 5); eq(s.next, '12 / 13 / 13 · 5 kg');
-});
-
-test('Vorschlag: Neck Bridge steigert um 5 Sekunden', () => {
-  const sets = [30, 40].map((r, i) => ({ t: T(18, 18, i), ex: 'neck', reps: r, kg: 0 }));
-  eq(suggestNext(sets, exById('neck'), T(20)).next, '35 / 40');
 });
 
 test('Vorschlag: ein einzelner schwerer Test-Satz bestimmt nicht das Arbeitsgewicht', () => {
@@ -488,11 +483,10 @@ test('Körpergewicht am Trainingstag: Trend der letzten Messung, gleiche Tagesme
 test('Bewegte Last pro Satz: Anteil des Körpergewichts, Zusatzgewicht, Hanteln, Halteübung', () => {
   const set = (reps, kg = 0) => ({ reps, kg });
   eq(setLoad(set(10), exById('chin'), 85), 850);
-  eq(setLoad(set(10), exById('dips'), 85), 765);
+  eq(setLoad(set(10), exById('dips'), 85), 850);
   eq(Math.round(setLoad(set(12), exById('bss'), 85)), 867);
   eq(setLoad(set(10, 10), exById('chin'), 85), 950, 'Zusatzgewicht:');
   eq(setLoad(set(15, 5), exById('lat'), 85), 150, 'zwei Kurzhanteln à 5 kg:');
-  eq(setLoad(set(45), exById('neck'), 85), 0, 'Halteübung ohne Bewegung:');
   eq(setLoad(set(10), exById('chin'), null), null, 'ohne Körpergewicht:');
   eq(setLoad(set(15, 5), exById('lat'), null), 150, 'Hanteln brauchen kein Körpergewicht:');
 });
@@ -508,10 +502,72 @@ test('Bewegte Last: Summe über Sätze mit dem jeweils gültigen Körpergewicht'
 });
 
 test('Zusammenfassung für Claude enthält die bewegte Last', () => {
-  const md = buildSummary(sanitize({ weight: [{ t: T(19), kg: 85 }], train: [{ t: T(19, 18), ex: 'chin', reps: 10, kg: 0 }, { t: T(19, 18, 5), ex: 'neck', reps: 45, kg: 0 }] }), T(19, 20));
+  const md = buildSummary(sanitize({ weight: [{ t: T(19), kg: 85 }], train: [{ t: T(19, 18), ex: 'chin', reps: 10, kg: 0 }, { t: T(19, 18, 5), ex: 'neck', reps: 45, kg: 0 }] }), T(19, 20));   // Neck Bridge ist ausgeblendet
   ok(md.includes('Bewegte Last (≈)'), 'Spaltenkopf');
   ok(/\| Chin-ups \|[^\n]*\| 850 kg \|/.test(md), 'Chin-ups 850 kg: ' + md.split('\n').find(l => l.includes('Chin-ups')));
-  ok(/\| Neck Bridge \|[^\n]*\| – \|/.test(md), 'Neck Bridge ohne Wert');
+  ok(!md.includes('| Neck Bridge |'), 'ausgeblendete Übung wird nicht ausgewertet');
+});
+
+/* ---- Widerstandsbänder ---- */
+test('Bänder: Stärke in kg (aus den lbs des Produktbilds), Bereiche und Kennungen', () => {
+  eq(BANDS.map(b => b.id), BAND_IDS, 'gleiche Kennungen wie die Datenprüfung:');
+  eq(BANDS.map(b => bandRange(b.id)), ['7–11 kg', '9–16 kg', '14–23 kg', '18–36 kg', '23–57 kg', '27–77 kg']);
+  ok(Math.abs(bandKg('blue') - 9.07) < 0.01, 'Blau Mitte ≈ 9,07 kg');
+  ok(Math.abs(bandKg('black') - 52.16) < 0.01, 'Schwarz Mitte ≈ 52,2 kg');
+  ok(BANDS.every((b, i) => i === 0 || b.mid > BANDS[i - 1].mid), 'Bänder werden stärker');
+  eq(bandKg(''), 0); eq(bandKg('quatsch'), 0);
+});
+
+test('Bewegte Last mit Band: Körpergewichtsanteil plus Band; Chin-ups und Dips ignorieren Bänder', () => {
+  const s = (reps, b, kg = 0) => ({ reps, kg, ...(b ? { b } : {}) });
+  ok(Math.abs(setLoad(s(10, 'yellow'), exById('bss'), 85) - 10 * (0.85 * 85 + bandKg('yellow'))) < 1e-9, 'Split Squats');
+  ok(Math.abs(setLoad(s(15, 'red'), exById('lat'), 85) - 15 * bandKg('red')) < 1e-9, 'Lateral Raises nur Band');
+  ok(Math.abs(setLoad(s(20, 'black'), exById('dead'), 85) - 20 * (0.2 * 85 + bandKg('black'))) < 1e-9, 'Dead Bugs');
+  eq(setLoad(s(10, 'black'), exById('chin'), 85), 850, 'Chin-ups ohne Band:');
+  eq(setLoad(s(10, 'black'), exById('dips'), 85), 850, 'Dips ohne Band:');
+  ok(setLoad(s(10, 'blue'), exById('bss'), null) === null, 'Split Squats brauchen das Körpergewicht');
+  ok(setLoad(s(10, 'blue'), exById('lat'), null) > 0, 'Lateral Raises brauchen es nicht');
+});
+
+test('Band in den Daten: gültige Kennung bleibt, ungültige fällt weg; Neck Bridge bleibt gespeichert, wird aber nicht angezeigt', () => {
+  const s = sanitize({ train: [
+    { t: T(1), ex: 'bss', reps: 10, kg: 0, b: 'yellow' }, { t: T(2), ex: 'bss', reps: 10, kg: 0, b: 'pink' },
+    { t: T(3), ex: 'neck', reps: 45, kg: 0 }, { t: T(4), ex: 'hack', reps: 5, kg: 0 },
+  ] });
+  eq(s.train.map(x => x.b || ''), ['yellow', '', ''], 'Bänder:');
+  eq(s.train.map(x => x.ex), ['bss', 'bss', 'neck']);                    // neck bleibt, hack fällt weg
+  eq(sanitize({ ex: 'neck' }).ex, 'chin', 'ausgeblendete Übung ist nicht auswählbar');
+  eq(Object.keys(s.train[0]), ['t', 'ex', 'reps', 'kg', 'b'], 'Schlüsselreihenfolge:');
+  eq(workoutLoads(s.train, bodyweightFn([{ t: T(1), kg: 85 }])).length, 2, 'Neck Bridge zählt nicht zu den Workouts:');
+});
+
+test('Band zählt als Widerstand: stärkeres Band schlägt mehr Wiederholungen mit schwächerem; Rekord und bestes Set', () => {
+  const blue = { reps: 12, kg: 0, b: 'blue' }, yellow = { reps: 8, kg: 0, b: 'yellow' };
+  eq(topSet([blue, yellow]), yellow);
+  ok(isRecord([blue], 8, bandKg('yellow')), '8 Wdh. mit Gelb sind ein Rekord gegenüber 12 mit Blau');
+  ok(!isRecord([yellow], 12, bandKg('blue')), '12 Wdh. mit Blau sind keiner gegenüber 8 mit Gelb');
+});
+
+test('Vorschlag mit Band: Band bleibt gleich, nur die Wiederholungen steigen; ein einzelner Satz mit anderem Band zählt nicht', () => {
+  const mk = (r, b, i) => ({ t: T(18, 18, i), ex: 'bss', reps: r, kg: 0, b });
+  const s1 = suggestNext([mk(10, 'yellow', 0), mk(10, 'yellow', 3), mk(8, 'yellow', 6)], exById('bss'), T(20));
+  eq(s1.last, '10 / 10 / 8 · Gelb'); eq(s1.next, '10 / 10 / 9 · Gelb'); eq(s1.band, 'yellow');
+  const s2 = suggestNext([mk(12, 'blue', 0), mk(11, 'blue', 3), mk(6, 'red', 6)], exById('bss'), T(20));
+  eq(s2.band, 'blue', 'ein einzelner roter Test-Satz bestimmt nicht das Band:'); eq(s2.next, '12 / 12 · Blau');
+});
+
+test('Bewegte Last je Einheit: Veränderung zur vorigen Einheit, Workouts über alle Übungen', () => {
+  const bw = bodyweightFn([{ t: T(1), kg: 80 }]);          // gleichbleibend 80 kg
+  const chin = [10, 10, 9, /* Tag 2 */ 11, 10, 9, /* Tag 3 */ 8, 8, 8].map((r, i) => ({ t: T(1 + Math.floor(i / 3), 8, i % 3), ex: 'chin', reps: r, kg: 0 }));
+  const l = loadsByDay(chin, exById('chin'), bw);
+  eq(l.map(x => x.load), [29 * 80, 30 * 80, 24 * 80]);
+  eq(l[0].d, null); ok(Math.abs(l[1].d - (30 / 29 - 1)) < 1e-9, '+3,4 %'); ok(l[2].d < 0, 'Senkung');
+  eq([fmtPct(l[1].d), fmtPct(l[2].d), fmtPct(null), fmtPct(0)], ['+3,4 %', '−20,0 %', '–', '±0,0 %']);
+  // Workouts: Chin-ups plus Dips am selben Tag
+  const dips = [{ t: T(2, 9), ex: 'dips', reps: 10, kg: 0 }];
+  const w = workoutLoads([...chin, ...dips], bw);
+  eq(w.map(x => x.load), [29 * 80, 40 * 80, 24 * 80]); eq(Object.keys(w[1].per).sort(), ['chin', 'dips']);
+  ok(Math.abs(w[1].d - (40 / 29 - 1)) < 1e-9, 'Veränderung des gesamten Workouts');
 });
 
 /* ---- Zusammenfassung ---- */
@@ -525,12 +581,12 @@ test('Zusammenfassung mit Daten', () => {
   const s = buildSummary(doc({
     sleep: [{ bed: T(18, 23), wake: T(19, 7) }],
     weight: [{ t: T(12), kg: 86 }, { t: T(19), kg: 85 }],
-    train: [{ t: T(19, 18), ex: 'chin', reps: 10, kg: 0, n: 'Schulter zwickt' }, { t: T(19, 18, 3), ex: 'neck', reps: 45, kg: 0 }],
+    train: [{ t: T(19, 18), ex: 'chin', reps: 10, kg: 0, n: 'Schulter zwickt' }, { t: T(19, 18, 3), ex: 'dead', reps: 45, kg: 0, b: 'yellow' }],
   }), now);
   ok(!/\*\*Fasten|Fasten läuft/.test(s), 'kein Fasten mehr in der Zusammenfassung');
   ok(s.includes('Ø 8:00 h'), 'Schlaf');
   ok(s.includes('| Chin-ups | 1 | 1 | 10 Wdh. | 10 Wdh. |'), 'Training-Tabelle');
-  ok(s.includes('45 Sek.'), 'Neck Bridge in Sekunden');
+  ok(s.includes('Dead Bugs mit Band') && s.includes('Gelb'), 'Dead Bugs mit Band Gelb');
   ok(s.includes('Schulter zwickt'), 'Notiz');
   ok(s.includes('zuletzt 85,0 kg'), 'Gewicht');
 });
