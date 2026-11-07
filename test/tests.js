@@ -1,6 +1,6 @@
 // Tests für Zusammenführung, Logik und Zusammenfassung. Laufen im Browser über test/index.html.
 import { mergeDocs, sanitize, dayKey, LEGACY_KEYS, BAND_IDS, purgeExercises, tagDays, WTYPE_IDS } from '../js/merge.js';
-import { avgClock, movingAvg, suggestNext, isRecord, exById, buckets, rangeStart, endOfDay, bodyweightFn, setLoad, loadOf, fmtLoad, BANDS, bandKg, bandRange, topSet, loadsByDay, workoutLoads, fmtPct, compareLoads, WTYPES, wtypeOf, dayTypeOf, nextType, lightId, stagnating, withChange, strongerBand, D, H } from '../js/logic.js';
+import { avgClock, movingAvg, suggestNext, isRecord, exById, buckets, rangeStart, endOfDay, bodyweightFn, setLoad, loadOf, fmtLoad, BANDS, bandKg, bandRange, topSet, loadsByDay, workoutLoads, fmtPct, compareLoads, WTYPES, wtypeOf, dayTypeOf, nextType, lightId, withChange, strongerBand, D, H } from '../js/logic.js';
 import { buildSummary } from '../js/summary.js';
 import { analyzeDrift, mainSleeps } from '../js/drift.js';
 import { lineChart } from '../js/ui.js';
@@ -626,12 +626,12 @@ test('Bereinigung einer Übung: Sätze weg, Lösch-Markierungen gesetzt, alte Ge
 /* ---- Einheiten-Typen: 3er-Welle Leicht → Leicht → Schwer ---- */
 const wk = (d, w, ex = 'chin', reps = [10, 10, 8], b) => reps.map((r, i) => ({ t: T(d, 8, i), ex, reps: r, kg: 0, ...(b ? { b } : {}), ...(w ? { w } : {}) }));
 
-test('Welle: Leicht → Leicht → Schwer → Leicht; nach Deload Leicht; frühere Einheiten zählen nicht; ohne Vorgänger Schwer', () => {
+test('Welle: Leicht → Leicht → Schwer → Leicht; frühere Einheiten zählen nicht; ohne Vorgänger Schwer', () => {
   eq(WTYPES.map(t => t.id), WTYPE_IDS); ok(!WTYPES.some(t => /mittel/i.test(t.name)), 'es gibt kein Mittel mehr');
   const today = dayKey(T(20, 12)), next = (...days) => nextType(days.flatMap(([d, w]) => wk(d, w)), today);
   eq(next(), 'p', 'ohne Einheit:');
   eq(next([10, 'l']), 'k', 'nach der ersten leichten die zweite:'); eq(next([10, 'l'], [12, 'k']), 'p', 'nach der zweiten Schwer:');
-  eq(next([10, 'k'], [12, 'p']), 'l', 'nach Schwer wieder Leicht:'); eq(next([12, 'd']), 'l', 'nach Deload:');
+  eq(next([10, 'k'], [12, 'p']), 'l', 'nach Schwer wieder Leicht:');
   eq(next([12, undefined]), 'l', 'Sätze ohne Typ zählen als Schwer:'); eq(next([5, 'o'], [8, 'o']), 'p', 'frühere Einheiten werden übersprungen:');
   eq(next([5, 'p'], [8, 'o']), 'l');
   eq(nextType(wk(20, 'k'), today), 'p', 'die heutige Einheit zählt nicht als Vorgänger:');
@@ -644,8 +644,6 @@ test('Ziel je Typ aus der letzten Schwer-Einheit: gleiche Sätze, 70 % der Wiede
   eq(suggestNext(chin, e, now, 'l').next, '7 / 7 / 6', 'Leicht ≈ 70 %:'); eq(suggestNext(chin, e, now, 'k').next, '7 / 7 / 6');
   const p = suggestNext(chin, e, now, 'p');
   eq(p.next, '10 / 10 / 9'); eq(p.amrap, true); eq(p.day, T(1, 8), 'Bezug ist die letzte Schwer-Einheit, nicht die leichte danach:');
-  eq(suggestNext(chin, e, now, 'd').next, '6 / 6', 'Deload ≈ 60 %, ein Satz weniger:');
-  eq(suggestNext(wk(1, 'p', 'chin', [2]), e, now, 'd').next, '1', 'mindestens ein Satz und eine Wiederholung:');
   eq(suggestNext(wk(1, 'p', 'chin', [1, 1, 1]), e, now, 'l').next, '1 / 1 / 1');
   eq(suggestNext(wk(1, 'k', 'chin', [8, 8, 8]), e, now, 'p').day, T(1, 8), 'ohne Schwer-Einheit gilt die letzte Einheit:');
   // frühere Einheiten (o) dienen nicht als Bezug, solange es eine andere gibt
@@ -690,18 +688,6 @@ test('Vergleich nur gleicher Typen: Schwer gegen Schwer, leichte Einheiten als A
   const l = compareLoads(loads.slice(0, 2), dayKey(T(3, 20)));
   eq(l.light, true); ok(Math.abs(l.share - 21 / 30) < 1e-9, '70 % der Schwer-Einheit'); eq(l.type, 'l');
   eq(compareLoads(loadsByDay(wk(3, 'l', 'chin', [7, 7, 7]), e, bw), dayKey(T(3, 20))).share, null, 'ohne Schwer-Einheit als Maßstab:');
-});
-
-test('Stagnation: zwei Schwer-Einheiten hintereinander ohne Fortschritt (leichte zählen nicht, heute auch nicht)', () => {
-  const bw = bodyweightFn([{ t: T(1), kg: 80 }]), e = exById('chin');
-  const mk = (...p) => loadsByDay(p.flatMap(([d, w, rs]) => wk(d, w, 'chin', rs)), e, bw);
-  const today = dayKey(T(20, 12));
-  eq(stagnating(mk([1, 'p', [9, 9, 9]], [4, 'p', [9, 9, 9]], [7, 'p', [9, 9, 9]]), today), true, 'dreimal gleich:');
-  eq(stagnating(mk([1, 'p', [9, 9, 9]], [4, 'p', [10, 9, 9]], [7, 'p', [10, 9, 9]]), today), false, 'dazwischen Fortschritt:');
-  eq(stagnating(mk([1, 'p', [9, 9, 9]], [4, 'p', [8, 8, 8]], [7, 'p', [8, 8, 8]]), today), true, 'Rückgang zählt als Stagnation:');
-  eq(stagnating(mk([1, 'p', [9, 9, 9]], [3, 'l', [6, 6, 6]], [4, 'p', [9, 9, 9]], [6, 'k', [6, 6, 6]], [7, 'p', [10, 9, 9]]), today), false, 'leichte Einheiten ändern nichts:');
-  eq(stagnating(mk([1, 'p', [9, 9, 9]], [4, 'p', [9, 9, 9]]), today), false, 'zu wenige Schwer-Einheiten:');
-  eq(stagnating(mk([1, 'p', [9, 9, 9]], [4, 'p', [10, 9, 9]], [20, 'p', [7, 7, 7]]), today), false, 'die heutige Einheit zählt nicht:');
 });
 
 test('Workouts über alle Übungen tragen den Typ des Tages', () => {

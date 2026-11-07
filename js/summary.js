@@ -1,7 +1,7 @@
 // Kompakte Markdown-Zusammenfassung, die beim Sync als zusammenfassung.md ins Gist geschrieben wird (für Claude).
 import { analyzeDrift } from './drift.js';
 import { dayKey } from './merge.js';
-import { H, rangeTitle, plural, num, kgNum, fmtDate, fmtShort, fmtFull, fmtHM, hhmm, avg, avgClock, movingAvg, rangeStart, EXS, topSet, byDay, bodyweightFn, loadOf, loadsByDay, workoutLoads, fmtLoad, fmtPct, resistTxt, BANDS, withChange, stagnating, wtypeById, nextType } from './logic.js';
+import { H, rangeTitle, plural, num, kgNum, fmtDate, fmtShort, fmtFull, fmtHM, hhmm, avg, avgClock, movingAvg, rangeStart, EXS, topSet, byDay, bodyweightFn, loadOf, loadsByDay, workoutLoads, fmtLoad, fmtPct, resistTxt, BANDS, withChange, wtypeById, nextType } from './logic.js';
 
 const sign = v => (v > 0 ? '+' : v < 0 ? '−' : '±') + num(Math.abs(v));
 
@@ -35,17 +35,15 @@ function block(s, now, days, withNotes) {
       L.push(`| ${ex.name} | ${byDay(sets).length} | ${sets.length} | ${b.reps} ${ex.unit}${resistTxt(b)} | ${sets.reduce((a, x) => a + x.reps, 0)} ${ex.unit} | ${(l => (l == null ? '?' : fmtLoad(l)))(loadOf(sets, ex, bwFn))} |`);
     }
     // Entwicklung der bewegten Last je Schwer-Einheit (die Veränderung bezieht sich auf die jeweils vorige Schwer-Einheit)
-    const dev = [], stag = [];
+    const dev = [];
     for (const ex of EXS) {
       const all = loadsByDay((s.train || []).filter(x => x.ex === ex.id), ex, bwFn);
       const ls = withChange(all.filter(l => l.w === 'p')).filter(l => l.t >= from).slice(-5);
       if (ls.length >= 2) dev.push(`- ${ex.name}: ${ls.map(l => fmtLoad(l.load)).join(' → ')} (zuletzt ${fmtPct(ls[ls.length - 1].d)})`);
-      if (stagnating(all, '')) stag.push(ex.name);
     }
     if (dev.length) L.push('', '**Bewegte Last je Schwer-Einheit (letzte bis zu 5):**', ...dev);
-    if (stag.length) L.push('', `**Stagnation (zwei Schwer-Einheiten ohne Fortschritt, Deload empfohlen):** ${stag.join(', ')}`);
     const wl = workoutLoads(s.train || [], bwFn).filter(l => l.t >= from).slice(-6);
-    if (wl.length >= 2) L.push('', `**Workouts (letzte bis zu 6, Typ: Leicht/Schwer/Deload):** ${wl.map(l => `${wtypeById(l.w).name} ${fmtLoad(l.load)}`).join(' → ')}`);
+    if (wl.length >= 2) L.push('', `**Workouts (letzte bis zu 6, Typ: Leicht/Schwer):** ${wl.map(l => `${wtypeById(l.w).name} ${fmtLoad(l.load)}`).join(' → ')}`);
   } else L.push('- **Training:** keine Sätze');
 
   if (withNotes) {
@@ -80,7 +78,7 @@ export function buildSummary(s, now = Date.now()) {
   L.push(...driftBlock(s, now));
   const bands = BANDS.map(b => `${b.name} ≈ ${Math.round(b.mid)} kg`).join(', ');
   L.push('---', 'Rohdaten: fastentracker.json · Zeiten als Unix-ms · Training: `reps` = Wiederholungen; `kg` = Zusatzgewicht; `b` = Widerstandsband (blue, green, purple, yellow, red, black); `n` = Notiz; Sätze der Übung `neck` (Neck Bridge) sind ausgeblendet und werden nicht ausgewertet',
-    `Einheiten-Typen (3er-Welle): Leicht (≈ 70 % der Wiederholungen der letzten Schwer-Einheit) → Leicht → Schwer (eine Wiederholung mehr, letzter Satz so viele wie möglich); Deload (≈ 60 %, ein Satz weniger) nur bei Stagnation. Typ je Satz in „w“: l und k = Leicht (1. und 2.), p = Schwer, d = Deload, o = früher (nicht verglichen); Sätze ohne „w“ zählen als Schwer. Nächster Typ laut Welle: ${wtypeById(nextType(s.train || [], dayKey(now))).name}.`,
+    `Einheiten-Typen (3er-Welle): Leicht (≈ 70 % der Wiederholungen der letzten Schwer-Einheit) → Leicht → Schwer (eine Wiederholung mehr, letzter Satz so viele wie möglich). Typ je Satz in „w“: l und k = Leicht (1. und 2.), p = Schwer, o = früher (nicht verglichen); Sätze ohne „w“ zählen als Schwer. Nächster Typ laut Welle: ${wtypeById(nextType(s.train || [], dayKey(now))).name}.`,
     `Bewegte Last (≈) = Wiederholungen × (Anteil des Körpergewichts + Band bzw. Zusatzgewicht); Körpergewicht = 7-Tage-Trend am Trainingstag; Anteile: Chin-ups 100 %, Dips 100 % (ohne Band), Split Squats 85 %, Dead Bugs 20 %, Lateral Raises 0 % (jeweils mit Band); Bänder (Mitte des Bereichs aus dem Produktbild, Spannung hängt von der Dehnung ab): ${bands}.`);
   return L.join('\n') + '\n';
 }

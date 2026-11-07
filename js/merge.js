@@ -8,9 +8,9 @@ export const EX_IDS = ['chin', 'dips', 'bss', 'lat', 'dead'];
 const LEGACY_EX = ['neck'];
 // Widerstandsbänder (Farben wie auf dem Produktbild)
 export const BAND_IDS = ['blue', 'green', 'purple', 'yellow', 'red', 'black'];
-// Einheiten-Typ eines Workouts: l = Leicht (1. von 2), k = Leicht (2. von 2), p = Schwer, d = Deload, o = früher (vor dem Start der
+// Einheiten-Typ eines Workouts: l = Leicht (1. von 2), k = Leicht (2. von 2), p = Schwer, o = früher (vor dem Start der
 // Typen, wird nicht verglichen). Sätze ohne Typ zählen als Schwer.
-export const WTYPE_IDS = ['l', 'k', 'p', 'd', 'o'];
+export const WTYPE_IDS = ['l', 'k', 'p', 'o'];
 const num = v => typeof v === 'number' && Number.isFinite(v);
 const inRange = (v, lo, hi) => num(v) && v >= lo && v <= hi;
 // Zeitpunkte: 2000 bis 2100. Alles andere (z. B. 1e20) würde beim Formatieren eine Ausnahme auslösen und einen Bereich lahmlegen.

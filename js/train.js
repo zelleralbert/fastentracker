@@ -1,6 +1,6 @@
 import { state, save, tomb } from './store.js';
 import { EXS, BANDS, exById, byDay, isRecord, suggestNext, bandById, bandKg, bandRange, resistTxt, kgNum, num, plural,
-  fmtDay, dayKey, bodyweightFn, loadsByDay, compareLoads, workoutLoads, withChange, stagnating, wtypeById, dayTypeOf, nextType, lightId,
+  fmtDay, dayKey, bodyweightFn, loadsByDay, compareLoads, workoutLoads, withChange, wtypeById, dayTypeOf, nextType, lightId,
   cyclePos, fmtLoad, fmtPct } from './logic.js';
 import { $, esc, items, loadBars } from './ui.js';
 import { note as cleanNote } from './merge.js';
@@ -61,8 +61,8 @@ export function initTrain() {
   fillInputs();
 }
 
-// Auswahl des Einheiten-Typs (gilt für alle Übungen des heutigen Workouts): Leicht, Schwer oder Deload, dazu die Stellung in der Welle
-const CHOICES = [{ name: 'Leicht', ids: ['l', 'k'] }, { name: 'Schwer', ids: ['p'] }, { name: 'Deload', ids: ['d'] }];
+// Auswahl des Einheiten-Typs (gilt für alle Übungen des heutigen Workouts): Leicht oder Schwer, dazu die Stellung in der Welle
+const CHOICES = [{ name: 'Leicht', ids: ['l', 'k'] }, { name: 'Schwer', ids: ['p'] }];
 function renderTypes() {
   const cur = currentType(), box = $('tType'), day = dayKey(Date.now());
   box.innerHTML = '';
@@ -76,7 +76,6 @@ function renderTypes() {
   }
   const pos = cyclePos(cur);
   $('tTypeHint').textContent = cur === 'p' ? 'Einheit 3 von 3 · Schwer: eine Wiederholung mehr als beim letzten Mal, letzter Satz so viele wie möglich'
-    : cur === 'd' ? 'Deload: etwa 60 % der Wiederholungen und ein Satz weniger'
     : cur === 'o' ? 'Frühere Einheit'
     : `Einheit ${pos} von 3 · Leicht: etwa 70 % der Wiederholungen der letzten Schwer-Einheit`;
 }
@@ -137,11 +136,6 @@ export function renderTrain() {
   const loads = loadsByDay(all, e, bwFn), cmp = compareLoads(loads, today);
   $('tCardNote').textContent = needsBw ? 'Trage dein Körpergewicht im Tab Gewicht ein, dann wird die bewegte Last berechnet.' : '';
 
-  // Deload nur bei Stagnation empfehlen
-  const stag = stagnating(loads, today) && type !== 'd';
-  $('tStag').hidden = !stag;
-  if (stag) $('tStag').innerHTML = '<b>Stagnation:</b> Die letzten zwei Schwer-Einheiten dieser Übung waren nicht besser. Ein Deload kann helfen (oben „Deload“ wählen).';
-
   // Wichtigste Kennzahlen: was ich heute in dieser Übung geleistet habe und wie das zu früheren Einheiten steht
   $('tCard').hidden = !cmp;
   if (cmp) {
@@ -153,7 +147,7 @@ export function renderTrain() {
     const pc = $('tCardPct'), refs = [];
     const row = (lbl, v) => `<div><span>${lbl}</span><span class="delta ${cls(v)}">${arrow(v)} ${fmtPct(v)}</span></div>`;
     if (cmp.light) {
-      // leichte oder Deload-Einheit: Anteil der letzten Schwer-Einheit, kein Fortschrittsvergleich
+      // leichte Einheit: Anteil der letzten Schwer-Einheit, kein Fortschrittsvergleich
       pc.textContent = cmp.share == null ? '' : `≈ ${num(cmp.share * 100, 0)} %`; pc.className = 'pct';
       $('tCardSub').textContent = `${plural(cur.n, 'Satz', 'Sätze')} · ${cur.reps} ${e.unit}` + (cmp.isToday ? ' bisher' : '')
         + (cmp.ref ? ` · von der letzten Schwer-Einheit (${fmtDay(cmp.ref.t)}: ${fmtLoad(cmp.ref.load)})` : ' · noch keine Schwer-Einheit als Maßstab');

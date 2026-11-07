@@ -125,10 +125,10 @@ export const resistTxt = x => `${x.kg > 0 ? ` · ${kgNum(x.kg)} kg` : ''}${x.b &
 
 /* ---- Einheiten-Typen: 3er-Welle Leicht → Leicht → Schwer ---- */
 // pct = Anteil der Wiederholungen der letzten Schwer-Einheit. l = erste, k = zweite leichte Einheit (so weiß die App, wo du in der
-// Welle stehst); o = früher (vor dem Start der Typen, wird nicht verglichen). Deload: 60 % und ein Satz weniger, nur bei Stagnation.
+// Welle stehst); o = früher (vor dem Start der Typen, wird nicht verglichen).
 export const WTYPES = [
   { id: 'l', name: 'Leicht', pct: 0.7 }, { id: 'k', name: 'Leicht', pct: 0.7 },
-  { id: 'p', name: 'Schwer', pct: 1 }, { id: 'd', name: 'Deload', pct: 0.6 }, { id: 'o', name: 'Früher', pct: 1 },
+  { id: 'p', name: 'Schwer', pct: 1 }, { id: 'o', name: 'Früher', pct: 1 },
 ];
 export const wtypeById = id => WTYPES.find(t => t.id === id) || WTYPES[2];
 // Sätze ohne Typ zählen als Schwer
@@ -140,8 +140,8 @@ const lastCounted = (train, todayKey) => {
   const days = byDay([...train].sort((a, b) => a.t - b.t)).filter(d => dayKey(d[0].t) !== todayKey && dayTypeOf(d) !== 'o');
   return days.length ? dayTypeOf(days[days.length - 1]) : '';
 };
-// Nächster Typ in der Welle: Leicht (1) → Leicht (2) → Schwer → Leicht (1); nach einem Deload wieder Leicht (1); ohne Vorgänger Schwer
-export const nextType = (train, todayKey) => ({ '': 'p', l: 'k', k: 'p', p: 'l', d: 'l' }[lastCounted(train, todayKey)]);
+// Nächster Typ in der Welle: Leicht (1) → Leicht (2) → Schwer → Leicht (1); ohne Vorgänger Schwer
+export const nextType = (train, todayKey) => ({ '': 'p', l: 'k', k: 'p', p: 'l' }[lastCounted(train, todayKey)]);
 // Welcher Leicht-Typ (l oder k) ist als Nächstes dran, falls du heute leicht trainieren willst?
 export const lightId = (train, todayKey) => (lastCounted(train, todayKey) === 'l' ? 'k' : 'l');
 export const cyclePos = id => ({ l: 1, k: 2, p: 3 }[id] || 0);
@@ -151,7 +151,7 @@ export const strongerBand = id => { const i = BANDS.findIndex(b => b.id === id);
 
 // Ziel für heute, abgeleitet aus der letzten Schwer-Einheit der Übung (gibt es keine, aus der letzten Einheit):
 // Gewicht und Band bleiben gleich, die Zahl der Sätze auch. Schwer: schwächster Satz (bei Gleichstand der letzte) eine
-// Wiederholung mehr, letzter Satz so viele wie möglich. Leicht/Deload: Anteil der Wiederholungen (Deload: ein Satz weniger).
+// Wiederholung mehr, letzter Satz so viele wie möglich. Leicht: Anteil der Wiederholungen.
 export function suggestNext(sets, ex, now = Date.now(), type = 'p') {
   const today = dayKey(now);
   const days = byDay(sets.filter(x => dayKey(x.t) !== today));
@@ -166,7 +166,7 @@ export function suggestNext(sets, ex, now = Date.now(), type = 'p') {
   const r = grp.map(x => x.reps), t = wtypeById(type);
   let target;
   if (t.id === 'p') { target = r.slice(); target[target.lastIndexOf(Math.min(...target))] += ex.inc || 1; }   // bei Gleichstand der letzte (müdeste) Satz
-  else { target = r.map(v => Math.max(1, Math.round(v * t.pct))); if (t.id === 'd' && target.length > 1) target = target.slice(0, -1); }
+  else { target = r.map(v => Math.max(1, Math.round(v * t.pct))); }
   const up = ex.band && t.id === 'p' && ref.b && r.every(v => v >= BAND_TOP) ? strongerBand(ref.b) : '';
   return {
     day: refDay[0].t, last: r.join(' / ') + resistTxt(ref), next: target.join(' / ') + resistTxt(ref), reps: target[0],
@@ -227,7 +227,7 @@ export function workoutLoads(train, bwFn) {
 
 // Vergleich der aktuellen Einheit (heute, sonst die letzte) mit früheren Einheiten derselben Übung.
 // loads: Ausgabe von loadsByDay (aufsteigend). Prozent = Anteil, z. B. 0,067 für +6,7 %.
-// Eine Schwer-Einheit wird nur mit früheren Schwer-Einheiten verglichen. Eine leichte oder Deload-Einheit zeigt
+// Eine Schwer-Einheit wird nur mit früheren Schwer-Einheiten verglichen. Eine leichte Einheit zeigt
 // nur, wie viel Prozent der letzten Schwer-Einheit sie ausmacht (light = true), nie einen Fortschritt oder Rückschritt.
 export function compareLoads(loads, today) {
   if (!loads.length) return null;
@@ -248,13 +248,4 @@ export function compareLoads(loads, today) {
     best, pctBest: best ? pct(cur.load, best.load) : null, isBest: !!best && cur.load > best.load,
     pctVs: l => pct(cur.load, l.load),
   };
-}
-
-// Stagnation: Die letzten beiden abgeschlossenen Schwer-Einheiten waren nicht besser (höchstens +0,5 %) als die jeweils vorige.
-// Nur dann wird ein Deload empfohlen (die heutige Einheit zählt nicht mit).
-export function stagnating(loads, today) {
-  const P = loads.filter(l => l.w === 'p' && dayKey(l.t) !== today);
-  if (P.length < 3) return false;
-  const [a, b, c] = P.slice(-3);
-  return b.load <= a.load * 1.005 && c.load <= b.load * 1.005;
 }
