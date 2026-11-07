@@ -471,12 +471,14 @@ test('Diagramm: Messpunkte liegen genau auf ihrer Verbindungslinie, der Trend is
 });
 
 /* ---- Bewegte Last bei Übungen mit dem Körpergewicht ---- */
-test('Körpergewicht am Trainingstag: Trend der letzten Messung, gleiche Tagesmessung zählt, davor die erste', () => {
+test('Körpergewicht am Trainingstag: neuere Messungen zählen mehr, gleiche Tagesmessung zählt, davor die erste', () => {
   const bw = bodyweightFn([{ t: T(3), kg: 84 }, { t: T(1), kg: 80 }, { t: T(2), kg: 82 }]);   // unsortiert
   eq(bw(T(1, 7)), 80, 'Messung am selben Tag:');
-  eq(bw(T(2, 7)), 81, 'Trend am zweiten Tag (Ø 80, 82):');
+  ok(Math.abs(bw(T(2, 7)) - (82 + 80 * Math.SQRT1_2) / (1 + Math.SQRT1_2)) < 1e-9, 'zweiter Tag: 82 zählt mehr als 80');
+  ok(bw(T(2, 7)) > 81, 'näher an der neuesten Messung als der Mittelwert');
   eq(bw(T(0, 7)), 80, 'vor der ersten Messung:');
-  eq(bw(T(9)), 82, 'nach der letzten Messung:');
+  ok(bw(T(9)) > 82.4 && bw(T(9)) < 82.5 && bw(T(9)) > 82, 'nach der letzten Messung: gewichtet (≈ 82,45), nicht der Mittelwert 82');
+  eq(bodyweightFn([{ t: T(1), kg: 70 }, { t: T(40), kg: 90 }])(T(41)), 90, 'Messungen älter als 14 Tage zählen nicht:');
   eq(bodyweightFn([])(T(1)), null, 'ohne Messungen:');
 });
 
@@ -493,9 +495,9 @@ test('Bewegte Last pro Satz: Anteil des Körpergewichts, Zusatzgewicht, Hanteln,
 
 test('Bewegte Last: Summe über Sätze mit dem jeweils gültigen Körpergewicht', () => {
   const bw = bodyweightFn([{ t: T(1), kg: 80 }, { t: T(5), kg: 90 }].map(w => ({ ...w })));
-  // Trend am 5. Tag: Ø(80, 90) = 85
+  // am 5. Tag: 90 (Gewicht 1) und 80 (vier Tage älter, Gewicht ¼) → 88
   const sets = [{ t: T(1, 8), reps: 10, kg: 0 }, { t: T(5, 8), reps: 10, kg: 0 }];
-  eq(loadOf(sets, exById('chin'), bw), 10 * 80 + 10 * 85);
+  eq(loadOf(sets, exById('chin'), bw), 10 * 80 + 10 * 88);
   eq(loadOf(sets, exById('chin'), bodyweightFn([])), null, 'keine Gewichtsdaten:');
   eq(loadOf([], exById('chin'), bw), null, 'keine Sätze:');
   eq(fmtLoad(870), '870 kg'); eq(fmtLoad(12345), '12,3 t');

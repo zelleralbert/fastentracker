@@ -1,8 +1,8 @@
 import { state, save, tomb } from './store.js';
 import { EXS, BANDS, exById, byDay, isRecord, suggestNext, bandById, bandKg, bandRange, resistTxt, kgNum, num, plural,
   fmtDay, dayKey, bodyweightFn, loadsByDay, compareLoads, workoutLoads, withChange, wtypeById, dayTypeOf, nextType, lightId,
-  cyclePos, fmtLoad, fmtPct } from './logic.js';
-import { $, esc, items, loadBars } from './ui.js';
+  cyclePos, fmtLoad, fmtPct, endOfDay } from './logic.js';
+import { $, esc, items, loadBars, lineChart } from './ui.js';
 import { note as cleanNote } from './merge.js';
 
 const ex = () => exById(state.ex);
@@ -167,6 +167,13 @@ export function renderTrain() {
   const perf = withChange(loads.filter(l => l.w === 'p')).slice(-8);
   $('tLoadBars').hidden = $('tLoadLeg').hidden = $('tLoadCap').hidden = perf.length < 2;
   if (perf.length >= 2) loadBars($('tLoadBars'), perf);
+
+  // Liniendiagramm über die gesamte Zeit: Schwer-Einheiten (Linie), frühere Einheiten ohne Typ als graue Punkte; leichte Einheiten fehlen
+  const pt = l => ({ t: l.t, v: Math.round(l.load) }), hard = loads.filter(l => l.w === 'p').map(pt), early = loads.filter(l => l.w === 'o').map(pt);
+  const shown = hard.length + early.length >= 2 && lineChart($('tChart'), { from: Math.min(...[...hard, ...early].map(p => p.t)), to: endOfDay(Date.now()), unit: 'kg', digits: 0,
+    series: [{ pts: early, dots: true, faint: true }, { pts: hard, line: true, dots: true }] });
+  $('tChartCap').hidden = $('tChartLeg').hidden = !shown; if (!shown) $('tChart').setAttribute('hidden', '');
+  $('tChartLeg').lastElementChild.hidden = !early.length;
 
   // Frühere Schwer-Einheiten; bei Schwer der Prozentwert des Fortschritts, sonst der Anteil an der jeweiligen Schwer-Einheit
   items($('tHist'), () => (cmp ? cmp.before.slice().reverse().slice(0, 20) : []).map(l => {

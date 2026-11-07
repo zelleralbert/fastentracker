@@ -7,7 +7,7 @@ import { initWeight, renderWeight } from './weight.js';
 import { initSync, renderSettings } from './sync.js';
 import { initTheme } from './theme.js';
 
-const VERSION = '3.6';
+const VERSION = '3.7';
 const TITLES = { sleep: 'Schlaf', train: 'Training', weight: 'Gewicht', settings: 'Einstellungen' };
 
 // Jeder Bereich wird einzeln abgesichert: ein Fehler in einem darf die übrigen nicht blockieren.

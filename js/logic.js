@@ -175,15 +175,19 @@ export function suggestNext(sets, ex, now = Date.now(), type = 'p') {
 }
 
 /* ---- Bewegte Last ---- */
-// Körpergewicht zu einem Zeitpunkt: 7-Tage-Trend der letzten Messung bis zu diesem Tag (eine Messung am selben Tag zählt mit);
+// Körpergewicht zu einem Zeitpunkt: gewichteter Trend der Messungen bis zu diesem Tag (eine Messung am selben Tag zählt mit);
 // liegt der Zeitpunkt vor der ersten Messung, gilt die erste. Ohne Messungen null.
 export function bodyweightFn(weights) {
-  const pts = movingAvg([...weights].sort((a, b) => a.t - b.t).map(w => ({ t: w.t, v: w.kg })));
+  const pts = [...weights].sort((a, b) => a.t - b.t).map(w => ({ t: w.t, v: w.kg }));
   return t => {
     if (!pts.length) return null;
     let lo = 0, hi = pts.length - 1, ans = 0;
     while (lo <= hi) { const m = (lo + hi) >> 1; if (pts[m].t <= t + 12 * H) { ans = m; lo = m + 1; } else hi = m - 1; }
-    return pts[ans].v;
+    // Gewichtet: neuere Messungen zählen mehr (Halbwertszeit 2 Tage, nur die letzten 14 Tage). So glättet der Wert Wasserschwankungen,
+    // hinkt aber bei seltenen Messungen nicht hinterher.
+    let sw = 0, s = 0;
+    for (let i = ans; i >= 0 && (i === ans || pts[ans].t - pts[i].t <= 14 * D); i--) { const w = Math.pow(0.5, (pts[ans].t - pts[i].t) / (2 * D)); sw += w; s += w * pts[i].v; }
+    return s / sw;
   };
 }
 
