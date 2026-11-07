@@ -140,3 +140,6 @@ code{font-size:.78rem;word-break:break-all;color:var(--muted)}
 .refs span:first-child{color:var(--muted)}
 .refs span:last-child{flex:none;white-space:nowrap;align-self:center}
 .badge{display:inline-block;background:var(--accent-soft);color:var(--accent);border-radius:99px;padding:2px 10px;font-size:.78rem;font-weight:600}
+.suggest.warn{background:#e2a64a1f;color:var(--text)}
+.suggest.warn b{color:var(--warn)}
+.chip.type{padding:8px 13px}

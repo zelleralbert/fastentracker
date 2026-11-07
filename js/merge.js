@@ -8,6 +8,9 @@ export const EX_IDS = ['chin', 'dips', 'bss', 'lat', 'dead'];
 const LEGACY_EX = ['neck'];
 // Widerstandsbänder (Farben wie auf dem Produktbild)
 export const BAND_IDS = ['blue', 'green', 'purple', 'yellow', 'red', 'black'];
+// Einheiten-Typ eines Workouts: l = Leicht (1. von 2), k = Leicht (2. von 2), p = Schwer, d = Deload, o = früher (vor dem Start der
+// Typen, wird nicht verglichen). Sätze ohne Typ zählen als Schwer.
+export const WTYPE_IDS = ['l', 'k', 'p', 'd', 'o'];
 const num = v => typeof v === 'number' && Number.isFinite(v);
 const inRange = (v, lo, hi) => num(v) && v >= lo && v <= hi;
 // Zeitpunkte: 2000 bis 2100. Alles andere (z. B. 1e20) würde beim Formatieren eine Ausnahme auslösen und einen Bereich lahmlegen.
@@ -48,7 +51,7 @@ export function sanitize(d) {
     weight: list(d.weight, x => isTime(x.t) && inRange(x.kg, 20, 400)
       ? { t: x.t, kg: x.kg, ...(num(x.u) ? { u: x.u } : {}) } : null),
     train: list(d.train, x => isTime(x.t) && (EX_IDS.includes(x.ex) || LEGACY_EX.includes(x.ex)) && inRange(x.reps, 1, 3600) && inRange(x.kg, 0, 500)
-      ? { t: x.t, ex: x.ex, reps: x.reps, kg: x.kg, ...(BAND_IDS.includes(x.b) ? { b: x.b } : {}), ...(note(x.n) ? { n: note(x.n) } : {}) } : null),
+      ? { t: x.t, ex: x.ex, reps: x.reps, kg: x.kg, ...(BAND_IDS.includes(x.b) ? { b: x.b } : {}), ...(WTYPE_IDS.includes(x.w) ? { w: x.w } : {}), ...(note(x.n) ? { n: note(x.n) } : {}), ...(num(x.u) ? { u: x.u } : {}) } : null),
     ex: EX_IDS.includes(d.ex) ? d.ex : 'chin',
     deleted,
     mod: num(d.mod) && d.mod > 0 ? d.mod : 0,
@@ -95,4 +98,19 @@ export function purgeExercises(doc, exIds, now = Date.now(), only = () => true) 
   const deleted = { ...d.deleted };
   for (const x of gone) deleted[KEYS.train(x)] = now;
   return { doc: sanitize({ ...d, train: d.train.filter(x => !isGone(x)), deleted, mod: now }), removed: gone.length };
+}
+
+// Setzt den Einheiten-Typ für Sätze ohne Typ nach Regeln {before: 'JJJJ-MM-TT'} (alle Tage davor) oder {day: 'JJJJ-MM-TT'}. `u` (Zeitpunkt
+// der Änderung) sorgt dafür, dass beim Abgleich die markierte Fassung gewinnt und nicht die alte ohne Typ.
+export function tagDays(doc, rules, now = Date.now()) {
+  const d = sanitize(doc);
+  let tagged = 0;
+  const train = d.train.map(x => {
+    if (x.w) return x;
+    const k = dayKey(x.t), rule = rules.find(r => (r.day ? k === r.day : k < r.before));
+    if (!rule) return x;
+    tagged++;
+    return { ...x, w: rule.w, u: now };
+  });
+  return tagged ? { doc: sanitize({ ...d, train, mod: now }), tagged } : { doc: d, tagged: 0 };
 }

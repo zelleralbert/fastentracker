@@ -49,8 +49,11 @@
 
   <!-- Training -->
   <section data-view="train" hidden>
-    <div class="chips" id="tEx" style="margin-top:10px"></div>
+    <div class="chips" id="tType" role="group" aria-label="Einheiten-Typ" style="margin-top:10px"></div>
+    <div class="fine center" id="tTypeHint" style="margin-top:8px"></div>
+    <div class="chips" id="tEx"></div>
     <div class="suggest" id="tSuggest" hidden></div>
+    <div class="suggest warn" id="tStag" hidden></div>
     <div class="inline">
       <input class="field" type="number" id="tReps" min="1" max="3600" inputmode="numeric" placeholder="Wdh.">
       <span id="tTimes">×</span>
@@ -71,11 +74,13 @@
     </div>
     <div class="fine center" id="tCardNote"></div>
 
+    <div class="fine center" id="tLoadCap" hidden>Schwere Einheiten im Vergleich</div>
     <div class="bars" id="tLoadBars" hidden></div>
     <div class="legend" id="tLoadLeg" hidden><span><i class="sq" style="background:var(--accent)"></i>mehr als zuletzt</span><span><i class="sq" style="background:var(--warn)"></i>weniger</span><span><i class="sq" style="background:var(--faint)"></i>erste</span></div>
 
     <details><summary>Früheren Einheiten im Vergleich</summary><div id="tHist"></div></details>
     <details><summary>Alle Übungen: Workouts im Vergleich</summary>
+      <div class="fine center" style="margin-top:6px">Balken: nur Schwer-Einheiten</div>
       <div class="bars" id="wkBars"></div>
       <div class="legend"><span><i class="sq" style="background:var(--accent)"></i>mehr als zuletzt</span><span><i class="sq" style="background:var(--warn)"></i>weniger</span><span><i class="sq" style="background:var(--faint)"></i>erste</span></div>
       <div id="wkList"></div>

@@ -1,5 +1,5 @@
 import { RANGES } from './logic.js';
-import { sanitize, LEGACY_KEYS, purgeExercises } from './merge.js';
+import { sanitize, LEGACY_KEYS, purgeExercises, tagDays } from './merge.js';
 
 // Zentraler Datenstand. Der Schlüssel bleibt 'fasten-v1', damit bestehende Daten erhalten bleiben.
 export const KEY = 'fasten-v1';
@@ -55,3 +55,16 @@ for (const p of PURGES) {
   donePurges.push(p.id);
 }
 ui.purged = donePurges; saveUi();
+
+// Einmalige Markierung auf Wunsch (Version 3.5): Startpunkt der Einheiten-Typen. Bei Chin-ups und Dips ist 9 / 9 / 9 das Maximum – das
+// zeigt die Einheit vom Sa., 31.10.2026, sie gilt als erste Schwer-Einheit. Das letzte Workout (Di., 03.11.2026) war „mittel“, also die
+// zweite leichte Einheit; als Nächstes steht Schwer an. Ältere Einheiten werden nicht mehr verglichen.
+const TAGS = [{ id: 'typen-start-2026-11', rules: [{ before: '2026-10-31', w: 'o' }, { day: '2026-10-31', w: 'p' }, { day: '2026-11-03', w: 'k' }] }];
+const doneTags = Array.isArray(ui.tagged) ? ui.tagged : [];
+for (const t of TAGS) {
+  if (doneTags.includes(t.id)) continue;
+  const { doc, tagged } = tagDays(state, t.rules);
+  if (tagged) { for (const k of Object.keys(state)) delete state[k]; Object.assign(state, doc); write(KEY, state); }
+  doneTags.push(t.id);
+}
+ui.tagged = doneTags; saveUi();
