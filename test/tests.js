@@ -727,7 +727,7 @@ test('Bandkombination in den Daten: gespeichert, normalisiert, Ungültiges verwo
   eq(resistTxt({ kg: 0, b: 'blue2+red' }), ' · Blau-Schleife + Rot');
 });
 
-test('Deadlifts und Front Squats: Last = Wiederholungen × Band (Stange wiegt praktisch nichts); Split Squats gibt es nicht mehr', () => {
+test('Deadlifts und Squats: Last = Wiederholungen × Band (Stange wiegt praktisch nichts); Split Squats gibt es nicht mehr', () => {
   eq(EX_IDS.includes('dl') && EX_IDS.includes('fs'), true); ok(!EX_IDS.includes('bss'), 'Split Squats nicht mehr wählbar');
   for (const id of ['dl', 'fs']) {
     const e = exById(id); eq(e.id, id); eq(e.band, true);

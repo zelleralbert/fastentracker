@@ -90,7 +90,7 @@ export const EXS = [
   { id: 'lat', name: 'Lateral Raises', hint: 'Wiederholungen', unit: 'Wdh.', bw: 0, band: true, pair: true },
   { id: 'dead', name: 'Dead Bugs', hint: 'Wiederholungen pro Seite', unit: 'Wdh.', bw: 0.2, band: true },
   { id: 'dl', name: 'Deadlifts', hint: 'Wiederholungen · Stange praktisch ohne Gewicht', unit: 'Wdh.', bw: 0, band: true },
-  { id: 'fs', name: 'Front Squats', hint: 'Wiederholungen · Stange praktisch ohne Gewicht', unit: 'Wdh.', bw: 0, band: true },
+  { id: 'fs', name: 'Squats', hint: 'Wiederholungen · Stange praktisch ohne Gewicht', unit: 'Wdh.', bw: 0, band: true },
 ];
 export const exById = id => EXS.find(e => e.id === id) || EXS[0];
 

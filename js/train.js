@@ -80,7 +80,7 @@ function renderTypes() {
     : `Einheit ${pos} von 3 · Leicht: etwa 70 % der Wiederholungen der letzten Schwer-Einheit`;
 }
 
-// Bandauswahl nur bei Übungen mit Band (Lateral Raises, Dead Bugs, Deadlifts, Front Squats); Chin-ups und Dips ohne Band
+// Bandauswahl nur bei Übungen mit Band (Lateral Raises, Dead Bugs, Deadlifts, Squats); Chin-ups und Dips ohne Band
 function renderBands(e) {
   const box = $('tBands');
   box.hidden = !e.band;
