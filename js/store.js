@@ -46,6 +46,7 @@ const PURGES = [
   { id: 'split-dead-vor-baendern', ex: ['bss', 'dead'] },
   { id: 'lat-vor-baendern', ex: ['lat'], only: x => !x.b },
   { id: 'neck-bridge-entfernt', ex: ['neck'] },   // Neck Bridge gibt es nicht mehr
+  { id: 'split-squats-entfernt', ex: ['bss'] },   // Split Squats gibt es nicht mehr
 ];
 const donePurges = Array.isArray(ui.purged) ? ui.purged : [];
 for (const p of PURGES) {

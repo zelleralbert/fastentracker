@@ -3,11 +3,23 @@
 export const pad = n => String(n).padStart(2, '0');
 export const dayKey = t => { const d = new Date(t); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
 
-export const EX_IDS = ['chin', 'dips', 'bss', 'lat', 'dead'];
-// Neck Bridge gibt es nicht mehr in der Auswahl; bereits gespeicherte Sätze bleiben aber erhalten (werden nur nicht angezeigt).
-const LEGACY_EX = ['neck'];
+export const EX_IDS = ['chin', 'dips', 'lat', 'dead', 'dl', 'fs'];
+// Neck Bridge und Split Squats gibt es nicht mehr in der Auswahl; bereits gespeicherte Sätze bleiben aber erhalten (werden nur nicht angezeigt).
+const LEGACY_EX = ['neck', 'bss'];
 // Widerstandsbänder (Farben wie auf dem Produktbild)
 export const BAND_IDS = ['blue', 'green', 'purple', 'yellow', 'red', 'black'];
+// Band-Kombination eines Satzes: Bänder mit „+“ verbunden, eine „2“ hinter der Farbe = als Schleife doppelt gelegt (doppelter Widerstand),
+// z. B. 'red+blue2'. Gibt die Schreibweise in fester Reihenfolge zurück, bei Ungültigem ''.
+export function normBand(s) {
+  if (typeof s !== 'string' || !s) return '';
+  const m = new Map();
+  for (const tok of s.split('+')) {
+    const r = /^([a-z]+)([12])?$/.exec(tok);
+    if (!r || !BAND_IDS.includes(r[1]) || m.has(r[1])) return '';
+    m.set(r[1], r[2] === '2' ? 2 : 1);
+  }
+  return BAND_IDS.filter(id => m.has(id)).map(id => id + (m.get(id) === 2 ? '2' : '')).join('+');
+}
 // Einheiten-Typ eines Workouts: l = Leicht (1. von 2), k = Leicht (2. von 2), p = Schwer, o = früher (vor dem Start der
 // Typen, wird nicht verglichen). Sätze ohne Typ zählen als Schwer.
 export const WTYPE_IDS = ['l', 'k', 'p', 'o'];
@@ -51,7 +63,7 @@ export function sanitize(d) {
     weight: list(d.weight, x => isTime(x.t) && inRange(x.kg, 20, 400)
       ? { t: x.t, kg: x.kg, ...(num(x.u) ? { u: x.u } : {}) } : null),
     train: list(d.train, x => isTime(x.t) && (EX_IDS.includes(x.ex) || LEGACY_EX.includes(x.ex)) && inRange(x.reps, 1, 3600) && inRange(x.kg, 0, 500)
-      ? { t: x.t, ex: x.ex, reps: x.reps, kg: x.kg, ...(BAND_IDS.includes(x.b) ? { b: x.b } : {}), ...(WTYPE_IDS.includes(x.w) ? { w: x.w } : {}), ...(note(x.n) ? { n: note(x.n) } : {}), ...(num(x.u) ? { u: x.u } : {}) } : null),
+      ? { t: x.t, ex: x.ex, reps: x.reps, kg: x.kg, ...(normBand(x.b) ? { b: normBand(x.b) } : {}), ...(WTYPE_IDS.includes(x.w) ? { w: x.w } : {}), ...(note(x.n) ? { n: note(x.n) } : {}), ...(num(x.u) ? { u: x.u } : {}) } : null),
     ex: EX_IDS.includes(d.ex) ? d.ex : 'chin',
     deleted,
     mod: num(d.mod) && d.mod > 0 ? d.mod : 0,

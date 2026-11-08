@@ -1,6 +1,6 @@
 // Tests für Zusammenführung, Logik und Zusammenfassung. Laufen im Browser über test/index.html.
-import { mergeDocs, sanitize, dayKey, LEGACY_KEYS, BAND_IDS, purgeExercises, tagDays, WTYPE_IDS } from '../js/merge.js';
-import { avgClock, movingAvg, suggestNext, isRecord, exById, buckets, rangeStart, endOfDay, bodyweightFn, setLoad, loadOf, fmtLoad, BANDS, bandKg, bandRange, topSet, loadsByDay, workoutLoads, fmtPct, compareLoads, WTYPES, wtypeOf, dayTypeOf, nextType, lightId, withChange, strongerBand, D, H } from '../js/logic.js';
+import { mergeDocs, sanitize, normBand, EX_IDS, dayKey, LEGACY_KEYS, BAND_IDS, purgeExercises, tagDays, WTYPE_IDS } from '../js/merge.js';
+import { avgClock, movingAvg, suggestNext, isRecord, exById, buckets, rangeStart, endOfDay, bodyweightFn, setLoad, loadOf, fmtLoad, BANDS, bandKg, bandRange, bandName, parseBand, resistTxt, topSet, loadsByDay, workoutLoads, fmtPct, compareLoads, WTYPES, wtypeOf, dayTypeOf, nextType, lightId, withChange, strongerBand, D, H } from '../js/logic.js';
 import { buildSummary } from '../js/summary.js';
 import { analyzeDrift, mainSleeps } from '../js/drift.js';
 import { lineChart } from '../js/ui.js';
@@ -486,7 +486,7 @@ test('Bewegte Last pro Satz: Anteil des Körpergewichts, Zusatzgewicht, Hanteln,
   const set = (reps, kg = 0) => ({ reps, kg });
   eq(setLoad(set(10), exById('chin'), 85), 850);
   eq(setLoad(set(10), exById('dips'), 85), 850);
-  eq(Math.round(setLoad(set(12), exById('bss'), 85)), 867);
+  eq(Math.round(setLoad(set(12), exById('dead'), 85)), 204);
   eq(setLoad(set(10, 10), exById('chin'), 85), 950, 'Zusatzgewicht:');
   eq(setLoad(set(15, 5), exById('lat'), 85), 150, 'zwei Kurzhanteln à 5 kg:');
   eq(setLoad(set(10), exById('chin'), null), null, 'ohne Körpergewicht:');
@@ -522,22 +522,22 @@ test('Bänder: Stärke in kg (aus den lbs des Produktbilds), Bereiche und Kennun
 
 test('Bewegte Last mit Band: Körpergewichtsanteil plus Band; Chin-ups und Dips ignorieren Bänder', () => {
   const s = (reps, b, kg = 0) => ({ reps, kg, ...(b ? { b } : {}) });
-  ok(Math.abs(setLoad(s(10, 'yellow'), exById('bss'), 85) - 10 * (0.85 * 85 + bandKg('yellow'))) < 1e-9, 'Split Squats');
+  ok(Math.abs(setLoad(s(10, 'yellow'), exById('dead'), 85) - 10 * (0.2 * 85 + bandKg('yellow'))) < 1e-9, 'Dead Bugs');
   ok(Math.abs(setLoad(s(15, 'red'), exById('lat'), 85) - 15 * bandKg('red')) < 1e-9, 'Lateral Raises nur Band');
   ok(Math.abs(setLoad(s(20, 'black'), exById('dead'), 85) - 20 * (0.2 * 85 + bandKg('black'))) < 1e-9, 'Dead Bugs');
   eq(setLoad(s(10, 'black'), exById('chin'), 85), 850, 'Chin-ups ohne Band:');
   eq(setLoad(s(10, 'black'), exById('dips'), 85), 850, 'Dips ohne Band:');
-  ok(setLoad(s(10, 'blue'), exById('bss'), null) === null, 'Split Squats brauchen das Körpergewicht');
+  ok(setLoad(s(10, 'blue'), exById('dead'), null) === null, 'Dead Bugs brauchen das Körpergewicht');
   ok(setLoad(s(10, 'blue'), exById('lat'), null) > 0, 'Lateral Raises brauchen es nicht');
 });
 
 test('Band in den Daten: gültige Kennung bleibt, ungültige fällt weg; Neck Bridge bleibt gespeichert, wird aber nicht angezeigt', () => {
   const s = sanitize({ train: [
-    { t: T(1), ex: 'bss', reps: 10, kg: 0, b: 'yellow' }, { t: T(2), ex: 'bss', reps: 10, kg: 0, b: 'pink' },
+    { t: T(1), ex: 'dead', reps: 10, kg: 0, b: 'yellow' }, { t: T(2), ex: 'dead', reps: 10, kg: 0, b: 'pink' },
     { t: T(3), ex: 'neck', reps: 45, kg: 0 }, { t: T(4), ex: 'hack', reps: 5, kg: 0 },
   ] });
   eq(s.train.map(x => x.b || ''), ['yellow', '', ''], 'Bänder:');
-  eq(s.train.map(x => x.ex), ['bss', 'bss', 'neck']);                    // neck bleibt, hack fällt weg
+  eq(s.train.map(x => x.ex), ['dead', 'dead', 'neck']);                    // neck bleibt, hack fällt weg
   eq(sanitize({ ex: 'neck' }).ex, 'chin', 'ausgeblendete Übung ist nicht auswählbar');
   eq(Object.keys(s.train[0]), ['t', 'ex', 'reps', 'kg', 'b'], 'Schlüsselreihenfolge:');
   eq(workoutLoads(s.train, bodyweightFn([{ t: T(1), kg: 85 }])).length, 2, 'Neck Bridge zählt nicht zu den Workouts:');
@@ -551,10 +551,10 @@ test('Band zählt als Widerstand: stärkeres Band schlägt mehr Wiederholungen m
 });
 
 test('Vorschlag mit Band: Band bleibt gleich, nur die Wiederholungen steigen; ein einzelner Satz mit anderem Band zählt nicht', () => {
-  const mk = (r, b, i) => ({ t: T(18, 18, i), ex: 'bss', reps: r, kg: 0, b });
-  const s1 = suggestNext([mk(10, 'yellow', 0), mk(10, 'yellow', 3), mk(8, 'yellow', 6)], exById('bss'), T(20));
+  const mk = (r, b, i) => ({ t: T(18, 18, i), ex: 'dead', reps: r, kg: 0, b });
+  const s1 = suggestNext([mk(10, 'yellow', 0), mk(10, 'yellow', 3), mk(8, 'yellow', 6)], exById('dead'), T(20));
   eq(s1.last, '10 / 10 / 8 · Gelb'); eq(s1.next, '10 / 10 / 9 · Gelb'); eq(s1.band, 'yellow');
-  const s2 = suggestNext([mk(12, 'blue', 0), mk(11, 'blue', 3), mk(6, 'red', 6)], exById('bss'), T(20));
+  const s2 = suggestNext([mk(12, 'blue', 0), mk(11, 'blue', 3), mk(6, 'red', 6)], exById('dead'), T(20));
   eq(s2.band, 'blue', 'ein einzelner roter Test-Satz bestimmt nicht das Band:'); eq(s2.next, '12 / 12 · Blau');
 });
 
@@ -672,11 +672,11 @@ test('Startwerte: Chin-ups und Dips 9 / 9 / 9 als Maximum, Ziel Schwer 9 / 9 / 1
 });
 
 test('Bandstufe: alle Sätze der Schwer-Einheit ab 12 Wiederholungen → nächstes stärkeres Band', () => {
-  const e = exById('bss');
-  eq(suggestNext(wk(1, 'p', 'bss', [12, 12, 13], 'yellow'), e, T(20), 'p').bandUp, { from: 'yellow', to: 'red' });
-  eq(suggestNext(wk(1, 'p', 'bss', [12, 11, 13], 'yellow'), e, T(20), 'p').bandUp, null, 'nicht alle Sätze:');
-  eq(suggestNext(wk(1, 'p', 'bss', [12, 12, 12], 'yellow'), e, T(20), 'l').bandUp, null, 'nur in der Schwer-Einheit:');
-  eq(suggestNext(wk(1, 'p', 'bss', [12, 12, 12], 'black'), e, T(20), 'p').bandUp, null, 'stärkstes Band:');
+  const e = exById('dead');
+  eq(suggestNext(wk(1, 'p', 'dead', [12, 12, 13], 'yellow'), e, T(20), 'p').bandUp, { from: 'yellow', to: 'red' });
+  eq(suggestNext(wk(1, 'p', 'dead', [12, 11, 13], 'yellow'), e, T(20), 'p').bandUp, null, 'nicht alle Sätze:');
+  eq(suggestNext(wk(1, 'p', 'dead', [12, 12, 12], 'yellow'), e, T(20), 'l').bandUp, null, 'nur in der Schwer-Einheit:');
+  eq(suggestNext(wk(1, 'p', 'dead', [12, 12, 12], 'black'), e, T(20), 'p').bandUp, null, 'stärkstes Band:');
   eq([strongerBand('blue'), strongerBand('black'), strongerBand('')], ['green', '', '']);
 });
 
@@ -701,6 +701,41 @@ test('Workouts über alle Übungen tragen den Typ des Tages', () => {
 test('Typ in den Daten: gültige Typen bleiben, ungültige fallen weg, Schlüsselreihenfolge', () => {
   const s = sanitize({ train: [{ t: T(1), ex: 'chin', reps: 9, kg: 0, w: 'k', n: 'x', u: 5 }, { t: T(2), ex: 'chin', reps: 9, kg: 0, w: 'm' }, { t: T(3), ex: 'chin', reps: 9, kg: 0, w: 'o' }] });
   eq(s.train.map(x => x.w || ''), ['k', '', 'o'], '„m“ (Mittel) gibt es nicht mehr:'); eq(Object.keys(s.train[0]), ['t', 'ex', 'reps', 'kg', 'w', 'n', 'u'], 'Schlüsselreihenfolge:');
+});
+
+/* ---- Bänder kombinieren, Schleife, Langhantel-Übungen ---- */
+test('Band-Kombination: feste Schreibweise, Schleife = doppelter Widerstand, Ungültiges fällt weg', () => {
+  eq(normBand('blue'), 'blue'); eq(normBand('blue1'), 'blue'); eq(normBand('blue2'), 'blue2');
+  eq(normBand('blue+red2'), 'blue+red2'); eq(normBand('red2+blue'), 'blue+red2', 'feste Reihenfolge:');
+  for (const bad of ['', 'x', 'blue+blue', 'blue3', 'blue+', '+blue', 'blue,red', 'BLUE', null, 5, 'blue+x']) eq(normBand(bad), '', String(bad));
+  eq(bandKg('blue2'), 2 * bandKg('blue'), 'Schleife verdoppelt:'); eq(bandKg('blue+red'), bandKg('blue') + bandKg('red'), 'Kombination addiert:');
+  eq(bandKg('yellow2+blue'), 2 * bandKg('yellow') + bandKg('blue')); eq(bandKg(''), 0); eq(bandKg('quatsch'), 0);
+  eq(bandRange('blue2'), '14–23 kg', 'Bereich verdoppelt (7–11 kg):'); eq(bandRange('blue+green'), '16–27 kg');
+  eq(bandName('blue'), 'Blau'); eq(bandName('red+blue2'), 'Blau-Schleife + Rot'); eq(bandName(''), '');
+  eq(parseBand('green2').map(p => [p.b.id, p.n]), [['green', 2]]);
+});
+
+test('Bandkombination in den Daten: gespeichert, normalisiert, Ungültiges verworfen; Last rechnet mit der Summe', () => {
+  const s = sanitize({ train: [{ t: T(1), ex: 'dead', reps: 8, kg: 0, b: 'red+blue2' }, { t: T(2), ex: 'dead', reps: 8, kg: 0, b: 'x+y' }, { t: T(3), ex: 'dead', reps: 8, kg: 0, b: 'blue+green2' }] });
+  eq(s.train.map(x => x.b || ''), ['blue2+red', '', 'blue+green2']); eq(sanitize(s).train, s.train, 'idempotent:');
+  const e = exById('dead'), one = setLoad({ reps: 10, kg: 0, b: 'blue' }, e, 80), two = setLoad({ reps: 10, kg: 0, b: 'blue2' }, e, 80);
+  ok(Math.abs((two - one) - 10 * bandKg('blue')) < 1e-9, 'Schleife = zweimal der Widerstand:');
+  ok(Math.abs(setLoad({ reps: 10, kg: 0, b: 'blue+red' }, e, 80) - setLoad({ reps: 10, kg: 0, b: '' }, e, 80) - 10 * (bandKg('blue') + bandKg('red'))) < 1e-9);
+  const sets = [{ t: T(1), ex: 'dead', reps: 10, kg: 0, b: 'blue+green' }];
+  eq(suggestNext(sets, e, T(5), 'p').band, 'blue+green', 'Vorschlag behält die Kombination:'); eq(suggestNext([{ ...sets[0], reps: 12 }, { ...sets[0], reps: 12, t: T(1, 9) }], e, T(5), 'p').bandUp, null, 'keine Bandstufe für Kombinationen:');
+  ok(isRecord([{ t: 1, ex: 'dead', reps: 10, kg: 0, b: 'blue' }], 10, bandKg('blue2')), 'Schleife ist mehr Widerstand als dasselbe Band einfach:');
+  eq(resistTxt({ kg: 0, b: 'blue2+red' }), ' · Blau-Schleife + Rot');
+});
+
+test('Deadlifts und Front Squats: Last = Wiederholungen × Band (Stange wiegt praktisch nichts); Split Squats gibt es nicht mehr', () => {
+  eq(EX_IDS.includes('dl') && EX_IDS.includes('fs'), true); ok(!EX_IDS.includes('bss'), 'Split Squats nicht mehr wählbar');
+  for (const id of ['dl', 'fs']) {
+    const e = exById(id); eq(e.id, id); eq(e.band, true);
+    eq(setLoad({ reps: 5, kg: 0, b: 'red2' }, e, null), 5 * 2 * bandKg('red'), 'ohne Körpergewicht, Schleife:'); eq(setLoad({ reps: 5, kg: 0, b: 'blue+red' }, e, 85), 5 * (bandKg('blue') + bandKg('red')));
+  }
+  const s = sanitize({ train: [{ t: T(1), ex: 'dl', reps: 5, kg: 0, b: 'red' }, { t: T(1, 9), ex: 'fs', reps: 5, kg: 0, b: 'blue2' }], ex: 'fs' });
+  eq(s.train.length, 2); eq(s.ex, 'fs'); eq(sanitize({ ex: 'bss' }).ex, 'chin', 'gespeicherte Auswahl Split Squats fällt auf Chin-ups zurück:');
+  eq(suggestNext([0, 1, 2].map(i => ({ t: T(1, 8 + i), ex: 'dl', reps: 5, kg: 0, b: 'red+blue' })), exById('dl'), T(5), 'p').next, '5 / 5 / 6 · Blau + Rot');
 });
 
 /* ---- Zusammenfassung ---- */

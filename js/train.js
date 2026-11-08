@@ -1,13 +1,13 @@
 import { state, save, tomb } from './store.js';
-import { EXS, BANDS, exById, byDay, isRecord, suggestNext, bandById, bandKg, bandRange, resistTxt, kgNum, num, plural,
+import { EXS, BANDS, exById, byDay, isRecord, suggestNext, bandName, bandKg, bandRange, bandById, resistTxt, kgNum, num, plural,
   fmtDay, dayKey, bodyweightFn, loadsByDay, compareLoads, workoutLoads, withChange, wtypeById, dayTypeOf, nextType, lightId,
-  cyclePos, fmtLoad, fmtPct, endOfDay } from './logic.js';
+  cyclePos, fmtLoad, fmtPct, endOfDay, parseBand } from './logic.js';
 import { $, esc, items, loadBars, lineChart } from './ui.js';
-import { note as cleanNote } from './merge.js';
+import { note as cleanNote, normBand } from './merge.js';
 
 const ex = () => exById(state.ex);
 const sets = () => state.train.filter(x => x.ex === state.ex);
-const setTxt = x => `${x.reps}${x.kg > 0 ? `×${kgNum(x.kg)}kg` : ''}${x.b && bandById(x.b) ? ' ' + bandById(x.b).name : ''}`;
+const setTxt = x => `${x.reps}${x.kg > 0 ? `×${kgNum(x.kg)}kg` : ''}${bandName(x.b) ? ' ' + bandName(x.b) : ''}`;
 const delta = d => {
   if (d == null) return '';
   const up = d > 0.0005, down = d < -0.0005;
@@ -25,11 +25,11 @@ function currentType() {
   return todays.length ? dayTypeOf(todays) : nextType(state.train, day);
 }
 
-function fillInputs() {
+function fillInputs(keepBand = false) {
   const e = ex(), s = suggestNext(sets(), e, Date.now(), currentType()), l = sets().slice(-1)[0];
   $('tReps').value = s ? s.reps : l ? l.reps : '';
   $('tKg').value = e.band ? '' : s ? (s.kg || '') : l && l.kg ? l.kg : '';
-  band = e.band ? (s ? s.band : l && l.b ? l.b : '') : '';
+  band = e.band ? (keepBand && band ? band : s ? s.band : l && l.b ? l.b : '') : '';
   $('tNote').value = '';
 }
 
@@ -80,19 +80,26 @@ function renderTypes() {
     : `Einheit ${pos} von 3 · Leicht: etwa 70 % der Wiederholungen der letzten Schwer-Einheit`;
 }
 
-// Bandauswahl nur bei Übungen mit Band (Split Squats, Lateral Raises, Dead Bugs); Chin-ups und Dips ohne Band
+// Bandauswahl nur bei Übungen mit Band (Lateral Raises, Dead Bugs, Deadlifts, Front Squats); Chin-ups und Dips ohne Band
 function renderBands(e) {
   const box = $('tBands');
   box.hidden = !e.band;
   $('tKg').hidden = $('tTimes').hidden = $('tKgLbl').hidden = !!e.band;   // mit Band kein Zusatzgewicht
   if (!e.band) return;
   box.innerHTML = '';
-  for (const b of [{ id: '', name: 'Kein Band', color: 'transparent' }, ...BANDS]) {
-    const el = document.createElement('button');
+  // Tippen: Band dazunehmen, nochmal: als Schleife (doppelter Widerstand), nochmal: wieder weg. So lassen sich Bänder kombinieren.
+  const cur = new Map(parseBand(band).map(p => [p.b.id, p.n]));
+  const none = document.createElement('button');
+  none.className = 'band'; none.setAttribute('aria-pressed', !cur.size);
+  none.innerHTML = '<i style="background:transparent;border:1px dashed var(--faint)"></i>Kein Band';
+  none.onclick = () => { band = ''; renderTrain(); };
+  box.appendChild(none);
+  for (const b of BANDS) {
+    const el = document.createElement('button'), n = cur.get(b.id) || 0;
     el.className = 'band';
-    el.setAttribute('aria-pressed', band === b.id);
-    el.innerHTML = `<i style="background:${b.color};${b.id ? '' : 'border:1px dashed var(--faint)'}"></i>${b.name}`;
-    el.onclick = () => { band = b.id; renderTrain(); };
+    el.setAttribute('aria-pressed', n > 0);
+    el.innerHTML = `<i style="background:${b.color}"></i>${b.name}${n === 2 ? ' ×2' : ''}`;
+    el.onclick = () => { const m = new Map(cur); const next = (n + 1) % 3; if (next) m.set(b.id, next); else m.delete(b.id); band = normBand([...m].map(([id, k]) => id + (k === 2 ? '2' : '')).join('+')); renderTrain(); };
     box.appendChild(el);
   }
 }
@@ -112,10 +119,10 @@ export function renderTrain() {
   }
   $('tReps').placeholder = e.unit;
   // Kamen die Daten erst später (Abgleich, Import), das leere Feld mit dem Vorschlag füllen – aber nie beim Tippen
-  if (!$('tReps').value && document.activeElement !== $('tReps')) fillInputs();
+  if (!$('tReps').value && document.activeElement !== $('tReps')) fillInputs(true);
   renderBands(e);
   $('tHint').textContent = e.band
-    ? (band ? `${e.hint} · Band ${bandById(band).name}: ${bandRange(band)}, gerechnet mit ≈ ${num(bandKg(band), 0)} kg` : `${e.hint} · Band wählen`)
+    ? (band ? `${e.hint} · ${bandName(band)}: ${bandRange(band)}, gerechnet mit ≈ ${num(bandKg(band), 0)} kg` : `${e.hint} · Band wählen (nochmal tippen: Schleife = doppelt)`)
     : e.hint;
 
   // Ziel für heute aus der letzten Schwer-Einheit

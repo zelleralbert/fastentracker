@@ -1,5 +1,5 @@
 // Formatierung und Berechnungen ohne DOM – von App, Zusammenfassung und Tests genutzt.
-import { pad, dayKey } from './merge.js';
+import { pad, dayKey, normBand } from './merge.js';
 export { pad, dayKey };
 
 export const H = 3600000, D = 86400000;
@@ -81,15 +81,16 @@ export function movingAvg(points, days = 7) {
 
 /* ---- Training ---- */
 // bw = Anteil des Körpergewichts, der bei einer Wiederholung bewegt wird (Näherung aus der Biomechanik):
-// Chin-ups und Dips bewegen den ganzen Körper (100 %), beim Split Squat trägt das vordere Bein den Großteil,
+// Chin-ups und Dips bewegen den ganzen Körper (100 %), 
 // bei Dead Bugs bewegen sich nur Arm und Bein. band = Übung mit Widerstandsband (zählt zusätzlich zum Körpergewicht).
 // pair = Zusatzgewicht (ältere Einträge) gilt für zwei Hände (Kurzhanteln).
 export const EXS = [
   { id: 'chin', name: 'Chin-ups', hint: '0 kg = Körpergewicht', unit: 'Wdh.', bw: 1 },
   { id: 'dips', name: 'Dips', hint: '0 kg = Körpergewicht', unit: 'Wdh.', bw: 1 },
-  { id: 'bss', name: 'Split Squats mit Band', hint: 'Wiederholungen pro Bein', unit: 'Wdh.', bw: 0.85, band: true },
   { id: 'lat', name: 'Lateral Raises mit Band', hint: 'Wiederholungen', unit: 'Wdh.', bw: 0, band: true, pair: true },
   { id: 'dead', name: 'Dead Bugs mit Band', hint: 'Wiederholungen pro Seite', unit: 'Wdh.', bw: 0.2, band: true },
+  { id: 'dl', name: 'Deadlifts', hint: 'Wiederholungen · Stange praktisch ohne Gewicht', unit: 'Wdh.', bw: 0, band: true },
+  { id: 'fs', name: 'Front Squats', hint: 'Wiederholungen · Stange praktisch ohne Gewicht', unit: 'Wdh.', bw: 0, band: true },
 ];
 export const exById = id => EXS.find(e => e.id === id) || EXS[0];
 
@@ -105,8 +106,14 @@ export const BANDS = [
   { id: 'black', name: 'Schwarz', lbs: [60, 170], color: '#6b7280' },
 ].map(b => ({ ...b, kg: b.lbs.map(v => v * LB), mid: (b.lbs[0] + b.lbs[1]) / 2 * LB }));
 export const bandById = id => BANDS.find(b => b.id === id);
-export const bandKg = id => (bandById(id) ? bandById(id).mid : 0);
-export const bandRange = id => { const b = bandById(id); return b ? `${Math.round(b.kg[0])}–${Math.round(b.kg[1])} kg` : ''; };
+// Band-Kombination (siehe normBand in merge.js): Liste {b: Band, n: 1 oder 2 (Schleife)}
+export const parseBand = s => { const c = normBand(s); return c ? c.split('+').map(t => ({ b: bandById(t.replace(/2$/, '')), n: t.endsWith('2') ? 2 : 1 })) : []; };
+export const bandKg = s => parseBand(s).reduce((a, p) => a + p.n * p.b.mid, 0);
+export const bandRange = s => {
+  const p = parseBand(s);
+  return p.length ? `${Math.round(p.reduce((a, q) => a + q.n * q.b.kg[0], 0))}–${Math.round(p.reduce((a, q) => a + q.n * q.b.kg[1], 0))} kg` : '';
+};
+export const bandName = s => parseBand(s).map(p => (p.n === 2 ? `${p.b.name}-Schleife` : p.b.name)).join(' + ');
 // Zusätzlicher Widerstand eines Satzes in kg (Zusatzgewicht plus Band), ohne Körpergewicht
 export const level = x => x.kg + bandKg(x.b);
 const lv = x => Math.round(level(x) * 100) / 100;
@@ -121,7 +128,7 @@ export function byDay(sets) {
 export const isRecord = (prev, reps, lvl) => prev.length > 0 && !prev.some(x => lv(x) > lvl + 1e-9 || (Math.abs(lv(x) - lvl) < 1e-9 && x.reps >= reps));
 
 // Text für Zusatzgewicht und Band eines Satzes (z. B. „ · 5 kg · Gelb“)
-export const resistTxt = x => `${x.kg > 0 ? ` · ${kgNum(x.kg)} kg` : ''}${x.b && bandById(x.b) ? ` · ${bandById(x.b).name}` : ''}`;
+export const resistTxt = x => `${x.kg > 0 ? ` · ${kgNum(x.kg)} kg` : ''}${bandName(x.b) ? ` · ${bandName(x.b)}` : ''}`;
 
 /* ---- Einheiten-Typen: 3er-Welle Leicht → Leicht → Schwer ---- */
 // pct = Anteil der Wiederholungen der letzten Schwer-Einheit. l = erste, k = zweite leichte Einheit (so weiß die App, wo du in der
