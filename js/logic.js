@@ -87,8 +87,8 @@ export function movingAvg(points, days = 7) {
 export const EXS = [
   { id: 'chin', name: 'Chin-ups', hint: '0 kg = Körpergewicht', unit: 'Wdh.', bw: 1 },
   { id: 'dips', name: 'Dips', hint: '0 kg = Körpergewicht', unit: 'Wdh.', bw: 1 },
-  { id: 'lat', name: 'Lateral Raises mit Band', hint: 'Wiederholungen', unit: 'Wdh.', bw: 0, band: true, pair: true },
-  { id: 'dead', name: 'Dead Bugs mit Band', hint: 'Wiederholungen pro Seite', unit: 'Wdh.', bw: 0.2, band: true },
+  { id: 'lat', name: 'Lateral Raises', hint: 'Wiederholungen', unit: 'Wdh.', bw: 0, band: true, pair: true },
+  { id: 'dead', name: 'Dead Bugs', hint: 'Wiederholungen pro Seite', unit: 'Wdh.', bw: 0.2, band: true },
   { id: 'dl', name: 'Deadlifts', hint: 'Wiederholungen · Stange praktisch ohne Gewicht', unit: 'Wdh.', bw: 0, band: true },
   { id: 'fs', name: 'Front Squats', hint: 'Wiederholungen · Stange praktisch ohne Gewicht', unit: 'Wdh.', bw: 0, band: true },
 ];

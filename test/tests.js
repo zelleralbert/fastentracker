@@ -754,7 +754,7 @@ test('Zusammenfassung mit Daten', () => {
   ok(!/\*\*Fasten|Fasten läuft/.test(s), 'kein Fasten mehr in der Zusammenfassung');
   ok(s.includes('Ø 8:00 h'), 'Schlaf');
   ok(s.includes('| Chin-ups | 1 | 1 | 10 Wdh. | 10 Wdh. |'), 'Training-Tabelle');
-  ok(s.includes('Dead Bugs mit Band') && s.includes('Gelb'), 'Dead Bugs mit Band Gelb');
+  ok(s.includes('Dead Bugs') && s.includes('Gelb'), 'Dead Bugs Gelb');
   ok(s.includes('Schulter zwickt'), 'Notiz');
   ok(s.includes('zuletzt 85,0 kg'), 'Gewicht');
 });
