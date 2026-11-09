@@ -3,6 +3,8 @@
 export const pad = n => String(n).padStart(2, '0');
 export const dayKey = t => { const d = new Date(t); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
 
+// Version des Datenformats. Ein Gerät mit einer älteren App darf Daten einer neueren nicht überschreiben (es würde Neues verwerfen).
+export const SCHEMA = 2;
 export const EX_IDS = ['chin', 'dips', 'lat', 'dead', 'dl', 'fs'];
 // Neck Bridge und Split Squats gibt es nicht mehr in der Auswahl; bereits gespeicherte Sätze bleiben aber erhalten (werden nur nicht angezeigt).
 const LEGACY_EX = ['neck', 'bss'];
@@ -67,6 +69,7 @@ export function sanitize(d) {
     ex: EX_IDS.includes(d.ex) ? d.ex : 'chin',
     deleted,
     mod: num(d.mod) && d.mod > 0 ? d.mod : 0,
+    v: SCHEMA,
   };
 }
 

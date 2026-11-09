@@ -1,7 +1,7 @@
 import { state, save, tomb } from './store.js';
-import { EXS, BANDS, exById, byDay, isRecord, suggestNext, bandName, bandKg, bandRange, bandById, resistTxt, kgNum, num, plural,
-  fmtDay, dayKey, bodyweightFn, loadsByDay, compareLoads, workoutLoads, withChange, wtypeById, currentWType, lightId,
-  cyclePos, fmtLoad, fmtPct, endOfDay, parseBand } from './logic.js';
+import { EXS, BANDS, exById, byDay, sessionEnd, isCurrent, isRecord, suggestNext, bandName, bandKg, bandRange, bandById, resistTxt, kgNum, num, plural,
+  fmtDay, bodyweightFn, loadsByDay, compareLoads, workoutLoads, withChange, wtypeById, currentWType, lightId,
+  cyclePos, fmtLoad, fmtPct, endOfDay, parseBand, weightAgeDays } from './logic.js';
 import { $, esc, items, loadBars, lineChart } from './ui.js';
 import { note as cleanNote, normBand } from './merge.js';
 
@@ -15,6 +15,7 @@ const delta = d => {
 };
 const share = v => `<span class="delta">${num(v * 100, 0)} %</span>`;
 let msgTimer, band = '';          // gewähltes Widerstandsband für den nächsten Satz ('' = keins)
+let editing = null;               // Satz, der gerade bearbeitet wird {t, ex}
 let chosen = null;                // vom Nutzer gewählter Einheiten-Typ {w, at}
 
 // Typ des heutigen Workouts: gewählt, sonst der des zuletzt gespeicherten Satzes von heute, sonst der nächste in der Welle
@@ -36,14 +37,29 @@ export function initTrain() {
     if (!(reps >= 1 && reps <= 500)) return alert('Bitte die Anzahl der Wiederholungen eingeben.');
     if (kg < 0 || kg > 500) return alert('Ungültiges Gewicht.');
     const b = e.band ? band : '', w = currentType();
+    const note0 = cleanNote($('tNote').value);
+    if (editing) {   // Änderung eines gespeicherten Satzes: gleicher Zeitpunkt und Typ, neuere Fassung (u) gewinnt beim Abgleich
+      const i = state.train.findIndex(x => x.t === editing.t && x.ex === editing.ex);
+      editing = null;
+      if (i >= 0) {
+        const old = state.train[i], n = { t: old.t, ex: old.ex, reps, kg };
+        if (b) n.b = b;
+        if (old.w) n.w = old.w;
+        if (note0) n.n = note0;
+        n.u = Date.now();
+        state.train[i] = n; save();
+      }
+      fillInputs();
+      const m = $('tMsg'); m.textContent = 'Geändert'; m.hidden = false; clearTimeout(msgTimer); msgTimer = setTimeout(() => { m.hidden = true; }, 2500);
+      return renderTrain();
+    }
     const prevSet = sets().slice(-1)[0];
     if (prevSet && Date.now() - prevSet.t < 1500 && prevSet.reps === reps && prevSet.kg === kg && (prevSet.b || '') === b) return; // versehentlicher Doppeltipp
     const record = isRecord(sets(), reps, kg + bandKg(b));
     const entry = { t: Date.now(), ex: e.id, reps, kg };
     if (b) entry.b = b;
     entry.w = w;
-    const note = cleanNote($('tNote').value);
-    if (note) entry.n = note;
+    if (note0) entry.n = note0;
     state.train.push(entry);
     save();
     $('tNote').value = '';
@@ -52,6 +68,7 @@ export function initTrain() {
     m.hidden = false; clearTimeout(msgTimer); msgTimer = setTimeout(() => { m.hidden = true; }, 2500);
     renderTrain();
   };
+  $('tCancel').onclick = () => { editing = null; fillInputs(); renderTrain(); };
   for (const id of ['tReps', 'tKg', 'tNote']) $(id).addEventListener('keydown', e => { if (e.key === 'Enter') $('tSave').click(); });
   fillInputs();
 }
@@ -59,14 +76,14 @@ export function initTrain() {
 // Auswahl des Einheiten-Typs (gilt für alle Übungen des heutigen Workouts): Leicht oder Schwer, dazu die Stellung in der Welle
 const CHOICES = [{ name: 'Leicht', ids: ['l', 'k'] }, { name: 'Schwer', ids: ['p'] }];
 function renderTypes() {
-  const cur = currentType(), box = $('tType'), day = dayKey(Date.now());
+  const cur = currentType(), box = $('tType');
   box.innerHTML = '';
   for (const c of CHOICES) {
     const b = document.createElement('button'), on = c.ids.includes(cur);
     b.className = 'chip type' + (on ? ' on' : '');
     b.setAttribute('aria-pressed', on);
     b.textContent = c.name;
-    b.onclick = () => { chosen = { w: c.ids.length > 1 ? lightId(state.train, day) : c.ids[0], at: Date.now() }; fillInputs(); renderTrain(); };
+    b.onclick = () => { chosen = { w: c.ids.length > 1 ? lightId(state.train, Date.now()) : c.ids[0], at: Date.now() }; fillInputs(); renderTrain(); };
     box.appendChild(b);
   }
   const pos = cyclePos(cur);
@@ -100,7 +117,9 @@ function renderBands(e) {
 }
 
 export function renderTrain() {
-  const e = ex(), all = sets(), today = dayKey(Date.now()), type = currentType();
+  const e = ex(), all = sets(), now = Date.now(), type = currentType();
+  if (editing && (editing.ex !== e.id || !state.train.some(x => x.t === editing.t && x.ex === editing.ex))) editing = null;
+  $('tSave').textContent = editing ? 'Änderung speichern' : 'Satz speichern'; $('tCancel').hidden = !editing;
   renderTypes();
 
   const box = $('tEx'); box.innerHTML = '';
@@ -109,7 +128,7 @@ export function renderTrain() {
     b.className = 'chip' + (x.id === e.id ? ' on' : '');
     b.setAttribute('aria-pressed', x.id === e.id);
     b.textContent = x.name;
-    b.onclick = () => { state.ex = x.id; save(); $('tMsg').hidden = true; fillInputs(); renderTrain(); };
+    b.onclick = () => { editing = null; state.ex = x.id; save(); $('tMsg').hidden = true; fillInputs(); renderTrain(); };
     box.appendChild(b);
   }
   $('tReps').placeholder = e.unit;
@@ -124,19 +143,23 @@ export function renderTrain() {
   const s = suggestNext(all, e, Date.now(), type), tn = wtypeById(type).name;
   $('tSuggest').hidden = !s;
   if (s) $('tSuggest').innerHTML = `${tn} · Ziel <b>${s.next}</b>${s.amrap ? ', letzter Satz so viele wie möglich' : ''}<br><span class="muted">letzte Schwer-Einheit (${fmtDay(s.day)}): ${s.last}</span>`
-    + (s.bandUp ? `<br>Alle Sätze ≥ 12: Band ${bandById(s.bandUp.to).name} statt ${bandById(s.bandUp.from).name} probieren` : '');
+    + (s.bandUp ? `<br>Alle Sätze ≥ 12: ${bandName(s.bandUp.to)} (≈ ${num(bandKg(s.bandUp.to), 0)} kg) statt ${bandName(s.bandUp.from)} probieren` : '');
 
-  const todays = all.filter(x => dayKey(x.t) === today);
+  // Sätze des laufenden bzw. des letzten Workouts dieser Übung (bis 24 Stunden danach), zum Ändern und Löschen
+  const lastW = byDay(all).slice(-1)[0], todays = lastW && now - sessionEnd(lastW) < 24 * 3600000 ? lastW : [];
   items($('tToday'), todays.map((x, i) => ({
     html: `Satz ${i + 1} · <b>${x.reps}</b> ${e.unit}${resistTxt(x)}${x.n ? `<em>${esc(x.n)}</em>` : ''}`,
-    onDel: () => { tomb('t:' + x.ex + x.t); state.train.splice(state.train.indexOf(x), 1); save(); renderTrain(); },
+    onEdit: () => { editing = { t: x.t, ex: x.ex }; $('tReps').value = x.reps; $('tKg').value = x.kg || ''; band = x.b || ''; $('tNote').value = x.n || ''; renderTrain(); scrollTo(0, 0); },
+    onDel: () => { if (editing && editing.t === x.t) editing = null; tomb('t:' + x.ex + x.t); state.train.splice(state.train.indexOf(x), 1); save(); renderTrain(); },
   })), '');
   if (!todays.length) $('tToday').innerHTML = '';
 
   // Bewegte Last (Näherung): Wiederholungen × (Anteil des Körpergewichts + Band), Körpergewicht aus deinen Gewichtsdaten
   const bwFn = bodyweightFn(state.weight), needsBw = e.bw > 0 && !state.weight.length;
-  const loads = loadsByDay(all, e, bwFn), cmp = compareLoads(loads, today);
-  $('tCardNote').textContent = needsBw ? 'Trage dein Körpergewicht im Tab Gewicht ein, dann wird die bewegte Last berechnet.' : '';
+  const loads = loadsByDay(all, e, bwFn), cmp = compareLoads(loads, now);
+  const age = e.bw > 0 ? weightAgeDays(state.weight, now) : null;
+  $('tCardNote').textContent = needsBw ? 'Trage dein Körpergewicht im Tab Gewicht ein, dann wird die bewegte Last berechnet.'
+    : age != null && age > 7 ? `Letzte Gewichtsmessung vor ${age} Tagen – die bewegte Last ist ungenau. Bitte im Tab Gewicht eintragen.` : '';
 
   // Wichtigste Kennzahlen: was ich heute in dieser Übung geleistet habe und wie das zu früheren Einheiten steht
   $('tCard').hidden = !cmp;
@@ -179,7 +202,7 @@ export function renderTrain() {
 
   // Frühere Schwer-Einheiten; bei Schwer der Prozentwert des Fortschritts, sonst der Anteil an der jeweiligen Schwer-Einheit
   items($('tHist'), () => (cmp ? cmp.before.slice().reverse().slice(0, 20) : []).map(l => {
-    const d = byDay(all).find(x => dayKey(x[0].t) === dayKey(l.t)) || [], v = cmp.pctVs(l);
+    const d = byDay(all).find(x => x[0].t === l.t) || [], v = cmp.pctVs(l);
     const notes = d.filter(x => x.n).map(x => esc(x.n));
     return { html: `${fmtDay(l.t)}<small>${d.map(setTxt).join(' / ')} · ≈ ${fmtLoad(l.load)} · ${cmp.light ? 'heute' : cmp.isToday ? 'heute' : 'zuletzt'} ${cmp.light ? (v == null ? '' : share(v)) : delta(v)}</small>${notes.length ? `<em>${notes.join(' · ')}</em>` : ''}` };
   }), 'Noch keine früheren Schwer-Einheiten dieser Übung.');

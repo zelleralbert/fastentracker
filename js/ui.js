@@ -21,11 +21,12 @@ export function items(el, rows, empty = 'Noch keine Einträge.') {
   el._lazy = null;
   el.innerHTML = '';
   if (!rows.length) { el.innerHTML = `<div class="empty">${empty}</div>`; return; }
-  for (const { html, onDel, confirmText } of rows) {
+  for (const { html, onDel, onEdit, confirmText } of rows) {
     const r = document.createElement('div');
     r.className = 'item';
-    r.innerHTML = `<div>${html}</div>` + (onDel ? '<button class="del" aria-label="Löschen">✕</button>' : '');
-    if (onDel) r.querySelector('.del').onclick = () => { if (!confirmText || confirm(confirmText)) onDel(); };
+    r.innerHTML = `<div>${html}</div>` + (onEdit ? '<button class="del edit" aria-label="Bearbeiten">✎</button>' : '') + (onDel ? '<button class="del" aria-label="Löschen">✕</button>' : '');
+    if (onEdit) r.querySelector('.edit').onclick = onEdit;
+    if (onDel) r.querySelector('.del:not(.edit)').onclick = () => { if (!confirmText || confirm(confirmText)) onDel(); };
     el.appendChild(r);
   }
 }

@@ -1,6 +1,6 @@
 // Tests für Zusammenführung, Logik und Zusammenfassung. Laufen im Browser über test/index.html.
-import { mergeDocs, sanitize, normBand, EX_IDS, dayKey, LEGACY_KEYS, BAND_IDS, purgeExercises, tagDays, WTYPE_IDS } from '../js/merge.js';
-import { avgClock, movingAvg, suggestNext, isRecord, exById, buckets, rangeStart, endOfDay, bodyweightFn, setLoad, loadOf, fmtLoad, BANDS, bandKg, bandRange, bandName, parseBand, resistTxt, topSet, loadsByDay, workoutLoads, fmtPct, compareLoads, WTYPES, wtypeOf, dayTypeOf, nextType, lightId, currentWType, withChange, strongerBand, D, H } from '../js/logic.js';
+import { mergeDocs, sanitize, normBand, EX_IDS, SCHEMA, dayKey, LEGACY_KEYS, BAND_IDS, purgeExercises, tagDays, WTYPE_IDS } from '../js/merge.js';
+import { avgClock, movingAvg, suggestNext, isRecord, exById, buckets, rangeStart, endOfDay, bodyweightFn, setLoad, loadOf, fmtLoad, BANDS, bandKg, bandRange, bandName, parseBand, resistTxt, topSet, loadsByDay, workoutLoads, fmtPct, compareLoads, WTYPES, wtypeOf, dayTypeOf, nextType, lightId, currentWType, withChange, nextBand, weightAgeDays, byDay, SESSION_GAP, isCurrent, D, H } from '../js/logic.js';
 import { buildSummary } from '../js/summary.js';
 import { analyzeDrift, mainSleeps } from '../js/drift.js';
 import { lineChart } from '../js/ui.js';
@@ -259,7 +259,7 @@ test('Wochentage in den Balken sind eindeutig', () => {
 });
 
 test('Vorschlag: ohne frühere Einheit keiner', () => {
-  eq(suggestNext([{ t: T(20, 9), ex: 'chin', reps: 5, kg: 0 }], exById('chin'), T(20, 18)), null);
+  eq(suggestNext([{ t: T(20, 9), ex: 'chin', reps: 5, kg: 0 }], exById('chin'), T(20, 11)), null);
 });
 
 test('Rekord-Erkennung', () => {
@@ -576,7 +576,7 @@ test('Vergleich heute gegen frühere Einheiten: letzte, Durchschnitt der letzten
   const bw = bodyweightFn([{ t: T(1), kg: 80 }]);
   // Chin-ups: Tag 1: 30 Wdh., Tag 2: 24 Wdh., Tag 3: 27 Wdh., heute (Tag 4): 30 Wdh.  → Last = Wdh. × 80 kg
   const sets = [[1, [10, 10, 10]], [2, [8, 8, 8]], [3, [9, 9, 9]], [4, [10, 10, 10]]].flatMap(([d, rs]) => rs.map((r, i) => ({ t: T(d, 8, i), ex: 'chin', reps: r, kg: 0 })));
-  const c = compareLoads(loadsByDay(sets, exById('chin'), bw), dayKey(T(4, 20)));
+  const c = compareLoads(loadsByDay(sets, exById('chin'), bw), T(4, 9));
   eq(c.isToday, true); eq(c.cur.load, 30 * 80);
   ok(Math.abs(c.pctLast - (30 / 27 - 1)) < 1e-9, 'zur letzten Einheit +11,1 %');
   eq(c.avgN, 3); ok(Math.abs(c.avg - (30 + 24 + 27) / 3 * 80) < 1e-9, 'Ø der letzten drei Einheiten');
@@ -585,17 +585,17 @@ test('Vergleich heute gegen frühere Einheiten: letzte, Durchschnitt der letzten
   ok(Math.abs(c.pctVs(c.before[1]) - (30 / 24 - 1)) < 1e-9, 'gegen eine bestimmte frühere Einheit');
   // neuer Bestwert
   const more = [...sets, { t: T(4, 8, 5), ex: 'chin', reps: 5, kg: 0 }];
-  const c2 = compareLoads(loadsByDay(more, exById('chin'), bw), dayKey(T(4, 20)));
+  const c2 = compareLoads(loadsByDay(more, exById('chin'), bw), T(4, 9));
   eq(c2.isBest, true); ok(c2.pctBest > 0, 'über dem bisherigen Bestwert');
 });
 
 test('Vergleich ohne heutige Einheit: die letzte Einheit gegen die davor; erste Einheit ohne Vergleich', () => {
   const bw = bodyweightFn([{ t: T(1), kg: 80 }]);
   const mk = (d, rs) => rs.map((r, i) => ({ t: T(d, 8, i), ex: 'dips', reps: r, kg: 0 }));
-  const c = compareLoads(loadsByDay([...mk(1, [10, 10]), ...mk(2, [11, 10])], exById('dips'), bw), dayKey(T(5, 12)));
+  const c = compareLoads(loadsByDay([...mk(1, [10, 10]), ...mk(2, [11, 10])], exById('dips'), bw), T(5, 9));
   eq(c.isToday, false); eq(c.cur.load, 21 * 80); ok(Math.abs(c.pctLast - (21 / 20 - 1)) < 1e-9);
   eq(c.avg, null, 'zu wenige Einheiten für einen Durchschnitt:');
-  const first = compareLoads(loadsByDay(mk(1, [10]), exById('dips'), bw), dayKey(T(1, 20)));
+  const first = compareLoads(loadsByDay(mk(1, [10]), exById('dips'), bw), T(1, 9));
   eq([first.last, first.pctLast, first.best, first.isBest], [null, null, null, false]);
   eq(compareLoads([], 'x'), null);
 });
@@ -630,13 +630,13 @@ const wk = (d, w, ex = 'chin', reps = [10, 10, 8], b) => reps.map((r, i) => ({ t
 
 test('Welle: Leicht → Leicht → Schwer → Leicht; frühere Einheiten zählen nicht; ohne Vorgänger Schwer', () => {
   eq(WTYPES.map(t => t.id), WTYPE_IDS); ok(!WTYPES.some(t => /mittel/i.test(t.name)), 'es gibt kein Mittel mehr');
-  const today = dayKey(T(20, 12)), next = (...days) => nextType(days.flatMap(([d, w]) => wk(d, w)), today);
+  const today = T(20, 12), next = (...days) => nextType(days.flatMap(([d, w]) => wk(d, w)), today);
   eq(next(), 'p', 'ohne Einheit:');
   eq(next([10, 'l']), 'k', 'nach der ersten leichten die zweite:'); eq(next([10, 'l'], [12, 'k']), 'p', 'nach der zweiten Schwer:');
   eq(next([10, 'k'], [12, 'p']), 'l', 'nach Schwer wieder Leicht:');
   eq(next([12, undefined]), 'l', 'Sätze ohne Typ zählen als Schwer:'); eq(next([5, 'o'], [8, 'o']), 'p', 'frühere Einheiten werden übersprungen:');
   eq(next([5, 'p'], [8, 'o']), 'l');
-  eq(nextType(wk(20, 'k'), today), 'p', 'die heutige Einheit zählt nicht als Vorgänger:');
+  eq(nextType(wk(20, 'k'), T(20, 10)), 'p', 'die heutige Einheit zählt nicht als Vorgänger:');
   eq(lightId(wk(10, 'l'), today), 'k'); eq(lightId(wk(10, 'p'), today), 'l'); eq(lightId([], today), 'l');
   eq(wtypeOf({ w: 'x' }), 'p'); eq(dayTypeOf([...wk(5, 'l'), { t: T(5, 9), ex: 'dips', reps: 9, kg: 0, w: 'k' }]), 'k', 'Typ des zuletzt gespeicherten Satzes:');
 });
@@ -658,13 +658,13 @@ test('Startwerte: Chin-ups und Dips 9 / 9 / 9 als Maximum, Ziel Schwer 9 / 9 / 1
   const { doc: d, tagged } = tagDays(doc({ train: raw, mod: 5 }), rules, T(30));
   eq(tagged, 18); eq([...new Set(d.train.filter(x => dayKey(x.t) === dayKey(T(8))).map(x => x.w))], ['o']);
   eq([...new Set(d.train.filter(x => dayKey(x.t) === dayKey(T(12))).map(x => x.w))], ['p']); eq([...new Set(d.train.filter(x => dayKey(x.t) === dayKey(T(15))).map(x => x.w))], ['k']);
-  eq(nextType(d.train, dayKey(T(20, 12))), 'p', 'als Nächstes Schwer:');
+  eq(nextType(d.train, T(20, 12)), 'p', 'als Nächstes Schwer:');
   for (const ex of ['chin', 'dips']) {
     const sets = d.train.filter(x => x.ex === ex), e = exById(ex);
     eq(suggestNext(sets, e, T(20), 'p').next, '9 / 9 / 10', ex + ' Schwer:'); eq(suggestNext(sets, e, T(20), 'l').next, '6 / 6 / 6', ex + ' Leicht:');
   }
   const bw = bodyweightFn([{ t: T(1), kg: 80 }]), loads = loadsByDay(d.train.filter(x => x.ex === 'dips'), exById('dips'), bw);
-  const cmp = compareLoads(loads, dayKey(T(20, 12)));
+  const cmp = compareLoads(loads, T(20, 12));
   eq(cmp.light, true); eq(cmp.ref.load, 27 * 80, 'leichte Einheit bezieht sich auf die Schwer-Einheit vom 12.:'); eq(cmp.before.length, 1, 'die älteren 10 / 10 / 10 werden nicht verglichen:');
   eq(tagDays(d, rules, T(31)).tagged, 0, 'zweiter Durchlauf ändert nichts:');
   const merged = mergeDocs(d, doc({ mod: 4, train: raw }));
@@ -673,29 +673,32 @@ test('Startwerte: Chin-ups und Dips 9 / 9 / 9 als Maximum, Ziel Schwer 9 / 9 / 1
 
 test('Bandstufe: alle Sätze der Schwer-Einheit ab 12 Wiederholungen → nächstes stärkeres Band', () => {
   const e = exById('dead');
-  eq(suggestNext(wk(1, 'p', 'dead', [12, 12, 13], 'yellow'), e, T(20), 'p').bandUp, { from: 'yellow', to: 'red' });
+  eq(suggestNext(wk(1, 'p', 'dead', [12, 12, 13], 'yellow'), e, T(20), 'p').bandUp, { from: 'yellow', to: 'blue+yellow' }, 'kleinster Schritt: Blau dazu:');
   eq(suggestNext(wk(1, 'p', 'dead', [12, 11, 13], 'yellow'), e, T(20), 'p').bandUp, null, 'nicht alle Sätze:');
   eq(suggestNext(wk(1, 'p', 'dead', [12, 12, 12], 'yellow'), e, T(20), 'l').bandUp, null, 'nur in der Schwer-Einheit:');
-  eq(suggestNext(wk(1, 'p', 'dead', [12, 12, 12], 'black'), e, T(20), 'p').bandUp, null, 'stärkstes Band:');
-  eq([strongerBand('blue'), strongerBand('black'), strongerBand('')], ['green', '', '']);
+  eq(suggestNext(wk(1, 'p', 'dead', [12, 12, 12], 'black'), e, T(20), 'p').bandUp, { from: 'black', to: 'blue+black' }, 'auch beim stärksten Band geht es feiner weiter:');
+  eq([nextBand('blue'), nextBand('yellow'), nextBand('black'), nextBand(''), nextBand('x')], ['green', 'blue+yellow', 'blue+black', '', '']);
+  eq(nextBand('blue+green'), 'blue+purple', 'Kombination: Band eine Stufe stärker'); eq(nextBand('blue2'), 'green2', 'Schleife: Band eine Stufe stärker, bleibt Schleife');
+  ok(bandKg(nextBand('red+blue')) > bandKg('red+blue') && bandKg(nextBand('red+blue')) - bandKg('red+blue') < 20, 'immer ein kleiner Schritt nach oben');
+  eq(nextBand('blue+green+purple') !== '', true, 'bei 3 Bändern: stärker statt vierter Band'); eq(parseBand(nextBand('blue+green+purple')).length <= 3, true);
 });
 
 test('Vergleich nur gleicher Typen: Schwer gegen Schwer, leichte Einheiten als Anteil, nie als Rückschritt', () => {
   const bw = bodyweightFn([{ t: T(1), kg: 80 }]), e = exById('chin');
   const loads = loadsByDay([...wk(1, 'p', 'chin', [10, 10, 10]), ...wk(3, 'l', 'chin', [7, 7, 7]), ...wk(5, 'k', 'chin', [8, 8, 9]), ...wk(8, 'p', 'chin', [10, 10, 11])], e, bw);
   eq(loads.map(l => l.w), ['p', 'l', 'k', 'p']);
-  const c = compareLoads(loads, dayKey(T(8, 20)));
+  const c = compareLoads(loads, T(8, 9));
   eq(c.light, false); eq(c.last.load, 30 * 80, 'zur letzten Schwer-Einheit, nicht zur leichten:'); ok(Math.abs(c.pctLast - (31 / 30 - 1)) < 1e-9, '+3,3 %');
   eq(c.before.length, 1);
-  const l = compareLoads(loads.slice(0, 2), dayKey(T(3, 20)));
+  const l = compareLoads(loads.slice(0, 2), T(3, 9));
   eq(l.light, true); ok(Math.abs(l.share - 21 / 30) < 1e-9, '70 % der Schwer-Einheit'); eq(l.type, 'l');
-  eq(compareLoads(loadsByDay(wk(3, 'l', 'chin', [7, 7, 7]), e, bw), dayKey(T(3, 20))).share, null, 'ohne Schwer-Einheit als Maßstab:');
+  eq(compareLoads(loadsByDay(wk(3, 'l', 'chin', [7, 7, 7]), e, bw), T(3, 9)).share, null, 'ohne Schwer-Einheit als Maßstab:');
 });
 
 test('Workouts über alle Übungen tragen den Typ des Tages', () => {
   const bw = bodyweightFn([{ t: T(1), kg: 80 }]);
   const w = workoutLoads([...wk(2, 'l'), ...wk(2, 'l', 'dips'), ...wk(4, 'p'), ...wk(4, 'p', 'dips')], bw);
-  eq(w.map(x => x.w), ['l', 'p']); eq(Object.keys(w[0]).sort(), ['d', 'load', 'per', 't', 'w']);
+  eq(w.map(x => x.w), ['l', 'p']); eq(Object.keys(w[0]).sort(), ['d', 'end', 'load', 'per', 't', 'w']);
 });
 
 test('Typ in den Daten: gültige Typen bleiben, ungültige fallen weg, Schlüsselreihenfolge', () => {
@@ -722,7 +725,7 @@ test('Bandkombination in den Daten: gespeichert, normalisiert, Ungültiges verwo
   ok(Math.abs((two - one) - 10 * bandKg('blue')) < 1e-9, 'Schleife = zweimal der Widerstand:');
   ok(Math.abs(setLoad({ reps: 10, kg: 0, b: 'blue+red' }, e, 80) - setLoad({ reps: 10, kg: 0, b: '' }, e, 80) - 10 * (bandKg('blue') + bandKg('red'))) < 1e-9);
   const sets = [{ t: T(1), ex: 'dead', reps: 10, kg: 0, b: 'blue+green' }];
-  eq(suggestNext(sets, e, T(5), 'p').band, 'blue+green', 'Vorschlag behält die Kombination:'); eq(suggestNext([{ ...sets[0], reps: 12 }, { ...sets[0], reps: 12, t: T(1, 9) }], e, T(5), 'p').bandUp, null, 'keine Bandstufe für Kombinationen:');
+  eq(suggestNext(sets, e, T(5), 'p').band, 'blue+green', 'Vorschlag behält die Kombination:'); eq(suggestNext([{ ...sets[0], reps: 12 }, { ...sets[0], reps: 12, t: T(1, 9) }], e, T(5), 'p').bandUp, { from: 'blue+green', to: 'blue+purple' }, 'Kombination: Band eine Stufe stärker:');
   ok(isRecord([{ t: 1, ex: 'dead', reps: 10, kg: 0, b: 'blue' }], 10, bandKg('blue2')), 'Schleife ist mehr Widerstand als dasselbe Band einfach:');
   eq(resistTxt({ kg: 0, b: 'blue2+red' }), ' · Blau-Schleife + Rot');
 });
@@ -746,8 +749,33 @@ test('Typ des heutigen Workouts: laufendes Workout behält den Typ über Mittern
   eq(currentWType(late, at(11, 12), null), 'l', 'Stunden später beginnt ein neues Workout, nach Schwer kommt Leicht:');
   eq(currentWType(late, at(11, 0, 20), { w: 'k', at: at(11, 0, 10) }), 'k', 'gewählter Typ geht vor:');
   eq(currentWType(late, at(11, 7), { w: 'p', at: at(11, 0, 10) }), 'l', 'nach über 6 Stunden gilt die Wahl nicht mehr:');
-  eq(currentWType([], at(11, 9), null), 'p', 'ohne Daten: Schwer'); eq(currentWType(sat, at(10, 20), null), 'p', 'heutiger Tag, Typ des letzten Satzes:');
+  eq(currentWType([], at(11, 9), null), 'p', 'ohne Daten: Schwer'); eq(currentWType(sat, at(10, 10), null), 'p', 'Workout läuft noch, Typ des letzten Satzes:'); eq(currentWType(sat, at(10, 20), null), 'l', 'Stunden später: neues Workout, nach Schwer Leicht:');
   eq(currentWType(sat, at(10, 7), null), 'p', 'Satz liegt (scheinbar) in der Zukunft: nächster Typ der Welle ohne Absturz');
+});
+
+test('Workouts: Sätze mit höchstens 4 Stunden Pause, auch über Mitternacht; Pausen darüber teilen', () => {
+  const at = (d, h, m = 0) => new Date(2026, 9, d, h, m).getTime(), s = (t, ex = 'chin') => ({ t, ex, reps: 9, kg: 0 });
+  const night = [s(at(10, 23, 30)), s(at(10, 23, 50), 'dips'), s(at(11, 0, 20)), s(at(11, 1, 30))];
+  eq(byDay(night).map(g => g.length), [4], 'über Mitternacht ein Workout:');
+  eq(byDay([s(at(10, 9)), s(at(10, 9, 30)), s(at(10, 15))]).map(g => g.length), [2, 1], 'mehr als 4 Stunden Pause: zwei Workouts am selben Tag:');
+  eq(byDay([s(at(10, 9)), s(at(10, 13))]).length, 1, 'genau 4 Stunden: noch ein Workout:'); eq(byDay([s(at(10, 9)), s(at(10, 13, 1))]).length, 2);
+  eq(byDay([s(at(12, 9)), s(at(10, 9)), s(at(10, 9, 5))]).map(g => g.length), [2, 1], 'unsortiert, aufsteigend ausgegeben:'); eq(byDay([]), []);
+  eq(isCurrent(at(10, 9), at(10, 12)), true); eq(isCurrent(at(10, 9), at(10, 13, 1)), false); eq(SESSION_GAP, 4 * 3600000);
+  // Vergleich: ein Workout über Mitternacht zählt als eine Einheit mit allen Sätzen
+  const bw = bodyweightFn([{ t: at(1, 8), kg: 80 }]), e = exById('chin');
+  const loads = loadsByDay([{ ...s(at(10, 23, 40)), w: 'p' }, { ...s(at(11, 0, 10)), w: 'p' }, { ...s(at(11, 0, 40)), w: 'p' }], e, bw);
+  eq(loads.length, 1); eq(loads[0].n, 3); eq(loads[0].t, at(10, 23, 40)); eq(loads[0].end, at(11, 0, 40));
+  eq(compareLoads(loads, at(11, 1)).isToday, true, 'läuft noch:'); eq(compareLoads(loads, at(11, 10)).isToday, false);
+  eq(workoutLoads([...night, s(at(14, 9))], bw).length, 2, 'Workouts über alle Übungen:');
+  eq(nextType([{ ...s(at(10, 23, 40)), w: 'p' }], at(11, 0, 30)), 'p', 'das laufende Workout zählt nicht als Vorgänger:'); eq(nextType([{ ...s(at(10, 23, 40)), w: 'p' }], at(11, 12)), 'l');
+});
+
+test('Gewichtsalter: Tage seit der letzten Messung; Datenversion schützt vor Überschreiben durch ältere Apps', () => {
+  const at = (d, h = 12) => new Date(2026, 9, d, h).getTime();
+  eq(weightAgeDays([], at(10)), null); eq(weightAgeDays([{ t: at(1), kg: 80 }, { t: at(5), kg: 81 }], at(10)), 5, 'letzte Messung zählt:');
+  eq(weightAgeDays([{ t: at(10), kg: 80 }], at(10, 18)), 0); eq(weightAgeDays([{ t: at(20), kg: 80 }], at(10)), null, 'Messungen weit in der Zukunft zählen nicht:');
+  eq(sanitize({}).v, SCHEMA, 'neue Daten tragen die Version'); eq(sanitize({ v: 99 }).v, SCHEMA); ok(SCHEMA >= 2);
+  eq(mergeDocs(doc({}), doc({ mod: 5 })).v, SCHEMA);
 });
 
 /* ---- Zusammenfassung ---- */

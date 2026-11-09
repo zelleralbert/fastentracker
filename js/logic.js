@@ -120,11 +120,20 @@ const lv = x => Math.round(level(x) * 100) / 100;
 
 // Bestes Set: höchster Zusatzwiderstand, bei Gleichstand mehr Wiederholungen
 export const topSet = sets => sets.reduce((b, x) => !b || lv(x) > lv(b) || (lv(x) === lv(b) && x.reps > b.reps) ? x : b, null);
+// Workouts: Sätze, zwischen denen höchstens 4 Stunden Pause liegen – auch über Mitternacht hinweg (bei wanderndem Schlafrhythmus liegt das
+// Training zu jeder Uhrzeit). Aufsteigend nach Zeit; jedes Workout ist eine Liste von Sätzen.
+export const SESSION_GAP = 4 * H;
 export function byDay(sets) {
-  const m = new Map();
-  for (const x of sets) { const k = dayKey(x.t); if (!m.has(k)) m.set(k, []); m.get(k).push(x); }
-  return [...m.values()];
+  const out = [];
+  for (const x of [...sets].sort((a, b) => a.t - b.t)) {
+    const g = out[out.length - 1];
+    if (g && x.t - g[g.length - 1].t <= SESSION_GAP) g.push(x); else out.push([x]);
+  }
+  return out;
 }
+export const sessionEnd = s => s[s.length - 1].t;
+// Läuft das Workout noch? (letzter Satz vor weniger als 4 Stunden)
+export const isCurrent = (endT, now) => now - endT < SESSION_GAP;
 export const isRecord = (prev, reps, lvl) => prev.length > 0 && !prev.some(x => lv(x) > lvl + 1e-9 || (Math.abs(lv(x) - lvl) < 1e-9 && x.reps >= reps));
 
 // Text für Zusatzgewicht und Band eines Satzes (z. B. „ · 5 kg · Gelb“)
@@ -142,35 +151,52 @@ export const wtypeById = id => WTYPES.find(t => t.id === id) || WTYPES[2];
 export const wtypeOf = x => (WTYPES.some(t => t.id === x.w) ? x.w : 'p');
 // Typ eines Trainingstags: der des zuletzt gespeicherten Satzes
 export const dayTypeOf = day => wtypeOf(day.reduce((a, x) => (x.t >= a.t ? x : a), day[0]));
-// Letzter Trainingstag vor heute, der in der Welle zählt (frühere Einheiten ‚o‘ werden übersprungen)
-const lastCounted = (train, todayKey) => {
-  const days = byDay([...train].sort((a, b) => a.t - b.t)).filter(d => dayKey(d[0].t) !== todayKey && dayTypeOf(d) !== 'o');
+// Typ des letzten abgeschlossenen Workouts, das in der Welle zählt (das laufende und frühere Einheiten ‚o‘ werden übersprungen)
+const lastCounted = (train, now) => {
+  const days = byDay(train).filter(d => !isCurrent(sessionEnd(d), now) && dayTypeOf(d) !== 'o');
   return days.length ? dayTypeOf(days[days.length - 1]) : '';
 };
 // Nächster Typ in der Welle: Leicht (1) → Leicht (2) → Schwer → Leicht (1); ohne Vorgänger Schwer
-export const nextType = (train, todayKey) => ({ '': 'p', l: 'k', k: 'p', p: 'l' }[lastCounted(train, todayKey)]);
+export const nextType = (train, now) => ({ '': 'p', l: 'k', k: 'p', p: 'l' }[lastCounted(train, now)]);
 // Welcher Leicht-Typ (l oder k) ist als Nächstes dran, falls du heute leicht trainieren willst?
-export const lightId = (train, todayKey) => (lastCounted(train, todayKey) === 'l' ? 'k' : 'l');
+export const lightId = (train, now) => (lastCounted(train, now) === 'l' ? 'k' : 'l');
 // Typ des heutigen Workouts. Gewählter Typ (gilt 6 Stunden), sonst der des Workouts, das gerade läuft (letzter Satz vor weniger als 4 Stunden –
-// auch über Mitternacht hinweg), sonst der des heutigen Tages, sonst der nächste in der Welle.
+// auch über Mitternacht hinweg), sonst der nächste in der Welle.
 export function currentWType(train, now, chosen) {
   if (chosen && chosen.w && now - chosen.at >= 0 && now - chosen.at < 6 * H) return chosen.w;
   const last = train.reduce((a, x) => (!a || x.t > a.t ? x : a), null);
-  if (last && now - last.t >= 0 && now - last.t < 4 * H) return wtypeOf(last);
-  const day = dayKey(now), todays = train.filter(x => dayKey(x.t) === day);
-  return todays.length ? dayTypeOf(todays) : nextType(train, day);
+  if (last && isCurrent(last.t, now)) return wtypeOf(last);
+  return nextType(train, now);
 }
 export const cyclePos = id => ({ l: 1, k: 2, p: 3 }[id] || 0);
 
 export const BAND_TOP = 12;      // alle Sätze mit so vielen Wiederholungen: nächstes Band probieren
-export const strongerBand = id => { const i = BANDS.findIndex(b => b.id === id); return i >= 0 && BANDS[i + 1] ? BANDS[i + 1].id : ''; };
+// Nächster Widerstand für ein Band bzw. eine Kombination: der kleinste Schritt nach oben – ein Band eine Stufe stärker, ein weiteres Band
+// dazu oder eine Schleife (höchstens 3 verschiedene Bänder). Gibt die Schreibweise zurück, '' wenn nichts passt.
+export function nextBand(cur) {
+  const base = parseBand(cur);
+  if (!base.length) return '';
+  const str = m => normBand([...m].map(([id, n]) => id + (n === 2 ? '2' : '')).join('+'));
+  const m0 = new Map(base.map(p => [p.b.id, p.n])), cands = [];
+  for (const [id, n] of m0) {
+    const nx = BANDS[BANDS.findIndex(b => b.id === id) + 1];
+    if (nx && !m0.has(nx.id)) { const m = new Map(m0); m.delete(id); m.set(nx.id, n); cands.push(str(m)); }
+    if (n === 1) { const m = new Map(m0); m.set(id, 2); cands.push(str(m)); }
+  }
+  if (m0.size < 3) for (const b of BANDS) if (!m0.has(b.id)) cands.push(str(new Map([...m0, [b.id, 1]])));
+  return cands.filter(c => bandKg(c) > bandKg(cur) + 0.5).sort((a, b) => bandKg(a) - bandKg(b))[0] || '';
+}
+// Tage seit der letzten Gewichtsmessung (null ohne Messung)
+export const weightAgeDays = (weights, now) => {
+  const t = Math.max(0, ...weights.filter(w => w.t <= now + 12 * H).map(w => w.t));
+  return t ? Math.floor((now - t) / D) : null;
+};
 
 // Ziel für heute, abgeleitet aus der letzten Schwer-Einheit der Übung (gibt es keine, aus der letzten Einheit):
 // Gewicht und Band bleiben gleich, die Zahl der Sätze auch. Schwer: schwächster Satz (bei Gleichstand der letzte) eine
 // Wiederholung mehr, letzter Satz so viele wie möglich. Leicht: Anteil der Wiederholungen.
 export function suggestNext(sets, ex, now = Date.now(), type = 'p') {
-  const today = dayKey(now);
-  const days = byDay(sets.filter(x => dayKey(x.t) !== today));
+  const days = byDay(sets).filter(d => !isCurrent(sessionEnd(d), now));
   if (!days.length) return null;
   const counted = days.filter(d => dayTypeOf(d) !== 'o');
   const refDay = [...counted].reverse().find(d => dayTypeOf(d) === 'p') || counted[counted.length - 1] || days[days.length - 1];
@@ -183,7 +209,7 @@ export function suggestNext(sets, ex, now = Date.now(), type = 'p') {
   let target;
   if (t.id === 'p') { target = r.slice(); target[target.lastIndexOf(Math.min(...target))] += ex.inc || 1; }   // bei Gleichstand der letzte (müdeste) Satz
   else { target = r.map(v => Math.max(1, Math.round(v * t.pct))); }
-  const up = ex.band && t.id === 'p' && ref.b && r.every(v => v >= BAND_TOP) ? strongerBand(ref.b) : '';
+  const up = ex.band && t.id === 'p' && ref.b && r.every(v => v >= BAND_TOP) ? nextBand(ref.b) : '';
   return {
     day: refDay[0].t, last: r.join(' / ') + resistTxt(ref), next: target.join(' / ') + resistTxt(ref), reps: target[0],
     kg: ref.kg, band: ref.b || '', type: t.id, amrap: t.id === 'p', bandUp: up ? { from: ref.b, to: up } : null,
@@ -226,32 +252,33 @@ export const fmtPct = d => (d == null ? '–' : `${d > 0.0005 ? '+' : d < -0.000
 
 // Jede Einheit bekommt die Veränderung d (Anteil, z. B. 0,067) gegenüber der vorigen; die erste hat null.
 export const withChange = list => list.map((x, i) => ({ ...x, d: i && list[i - 1].load > 0 ? x.load / list[i - 1].load - 1 : null }));
-// Bewegte Last je Trainingstag für eine Übung: [{t, load, reps, n, w (Einheiten-Typ), d}]
+// Bewegte Last je Workout für eine Übung: [{t (Beginn), end (letzter Satz), load, reps, n, w (Einheiten-Typ), d}]
 export function loadsByDay(sets, ex, bwFn) {
-  return withChange(byDay(sets).map(d => ({ t: d[0].t, load: loadOf(d, ex, bwFn), reps: d.reduce((a, x) => a + x.reps, 0), n: d.length, w: dayTypeOf(d) }))
+  return withChange(byDay(sets).map(d => ({ t: d[0].t, end: sessionEnd(d), load: loadOf(d, ex, bwFn), reps: d.reduce((a, x) => a + x.reps, 0), n: d.length, w: dayTypeOf(d) }))
     .filter(x => x.load != null && x.load > 0));
 }
 // Bewegte Last je Trainingstag über alle Übungen: [{t, load, per:{übung: kg}, w, d}]
 export function workoutLoads(train, bwFn) {
-  const m = new Map();
+  const valid = [];
   for (const x of train) {
     const ex = EXS.find(e => e.id === x.ex); if (!ex) continue;              // ausgeblendete Übungen (z. B. Neck Bridge) zählen nicht
-    const l = setLoad(x, ex, bwFn(x.t)); if (l == null) continue;
-    const k = dayKey(x.t), o = m.get(k) || { t: x.t, load: 0, per: {}, w: 'p', lt: 0 };
-    o.load += l; o.per[ex.id] = (o.per[ex.id] || 0) + l;
-    if (x.t >= o.lt) { o.lt = x.t; o.w = wtypeOf(x); }                       // Typ des Tages = Typ des zuletzt gespeicherten Satzes
-    m.set(k, o);
+    const l = setLoad(x, ex, bwFn(x.t)); if (l != null) valid.push({ x, ex, l });
   }
-  return withChange([...m.values()].map(({ lt, ...o }) => o).sort((a, b) => a.t - b.t));
+  const byX = new Map(valid.map(v => [v.x, v]));
+  return withChange(byDay(valid.map(v => v.x)).map(g => {
+    const o = { t: g[0].t, end: sessionEnd(g), load: 0, per: {}, w: dayTypeOf(g) };
+    for (const x of g) { const v = byX.get(x); o.load += v.l; o.per[v.ex.id] = (o.per[v.ex.id] || 0) + v.l; }
+    return o;
+  }));
 }
 
 // Vergleich der aktuellen Einheit (heute, sonst die letzte) mit früheren Einheiten derselben Übung.
 // loads: Ausgabe von loadsByDay (aufsteigend). Prozent = Anteil, z. B. 0,067 für +6,7 %.
 // Eine Schwer-Einheit wird nur mit früheren Schwer-Einheiten verglichen. Eine leichte Einheit zeigt
 // nur, wie viel Prozent der letzten Schwer-Einheit sie ausmacht (light = true), nie einen Fortschritt oder Rückschritt.
-export function compareLoads(loads, today) {
+export function compareLoads(loads, now) {
   if (!loads.length) return null;
-  const cur = loads[loads.length - 1], isToday = dayKey(cur.t) === today;
+  const cur = loads[loads.length - 1], isToday = isCurrent(cur.end, now);
   const before = loads.slice(0, -1).filter(l => l.w === 'p');
   const pct = (a, b) => (b > 0 ? a / b - 1 : null);
   if (cur.w !== 'p') {

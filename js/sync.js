@@ -1,6 +1,6 @@
 // Abgleich über ein geheimes GitHub-Gist, dazu Backup per Datei.
 import { state, save, replaceState, on, ui, saveUi } from './store.js';
-import { mergeDocs, sanitize, dayKey, LEGACY_KEYS } from './merge.js';
+import { mergeDocs, sanitize, dayKey, LEGACY_KEYS, SCHEMA } from './merge.js';
 import { buildSummary } from './summary.js';
 import { fmtDate, hhmm } from './logic.js';
 import { $ } from './ui.js';
@@ -32,6 +32,11 @@ export async function syncNow(manual) {
     if (!r.ok) throw fail(r);
     const g = await r.json(), f = g.files && g.files[DATA];
     const remote = f ? JSON.parse(f.truncated ? await (await fetch(f.raw_url, { cache: 'no-store', signal: signal() })).text() : f.content) : null;
+    // Stammen die Daten aus einer neueren App-Version, nichts überschreiben: diese Version würde Neues verwerfen
+    if (remote && typeof remote.v === 'number' && remote.v > SCHEMA) {
+      try { navigator.serviceWorker && navigator.serviceWorker.getRegistration().then(r => r && r.update()); } catch {}
+      throw new Error('Die Daten sind neuer als diese App-Version – die App aktualisiert sich gleich, bitte danach neu laden');
+    }
     const merged = remote ? mergeDocs(state, remote) : sanitize(state);
     const out = JSON.stringify(merged);
     if (out !== JSON.stringify(sanitize(state))) replaceState(merged);
@@ -87,6 +92,7 @@ async function importData(file) {
     const raw = JSON.parse(await file.text());
     const lists = ['sleep', 'weight', 'train'];
     if (!raw || typeof raw !== 'object' || !lists.some(k => Array.isArray(raw[k]))) throw new Error('keine Tagwerk-Sicherung');
+    if (typeof raw.v === 'number' && raw.v > SCHEMA) throw new Error('Die Sicherung stammt aus einer neueren App-Version');
     const data = sanitize(raw), count = lists.reduce((a, k) => a + data[k].length, 0);
     if (!count) throw new Error('keine gültigen Einträge gefunden');
     if (!confirm(`Sicherung mit ${count} gültigen Einträgen mit den vorhandenen Daten zusammenführen?`)) return;
