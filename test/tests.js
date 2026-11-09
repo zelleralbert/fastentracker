@@ -1,6 +1,6 @@
 // Tests für Zusammenführung, Logik und Zusammenfassung. Laufen im Browser über test/index.html.
 import { mergeDocs, sanitize, normBand, EX_IDS, dayKey, LEGACY_KEYS, BAND_IDS, purgeExercises, tagDays, WTYPE_IDS } from '../js/merge.js';
-import { avgClock, movingAvg, suggestNext, isRecord, exById, buckets, rangeStart, endOfDay, bodyweightFn, setLoad, loadOf, fmtLoad, BANDS, bandKg, bandRange, bandName, parseBand, resistTxt, topSet, loadsByDay, workoutLoads, fmtPct, compareLoads, WTYPES, wtypeOf, dayTypeOf, nextType, lightId, withChange, strongerBand, D, H } from '../js/logic.js';
+import { avgClock, movingAvg, suggestNext, isRecord, exById, buckets, rangeStart, endOfDay, bodyweightFn, setLoad, loadOf, fmtLoad, BANDS, bandKg, bandRange, bandName, parseBand, resistTxt, topSet, loadsByDay, workoutLoads, fmtPct, compareLoads, WTYPES, wtypeOf, dayTypeOf, nextType, lightId, currentWType, withChange, strongerBand, D, H } from '../js/logic.js';
 import { buildSummary } from '../js/summary.js';
 import { analyzeDrift, mainSleeps } from '../js/drift.js';
 import { lineChart } from '../js/ui.js';
@@ -736,6 +736,18 @@ test('Deadlifts und Squats: Last = Wiederholungen × Band (Stange wiegt praktisc
   const s = sanitize({ train: [{ t: T(1), ex: 'dl', reps: 5, kg: 0, b: 'red' }, { t: T(1, 9), ex: 'fs', reps: 5, kg: 0, b: 'blue2' }], ex: 'fs' });
   eq(s.train.length, 2); eq(s.ex, 'fs'); eq(sanitize({ ex: 'bss' }).ex, 'chin', 'gespeicherte Auswahl Split Squats fällt auf Chin-ups zurück:');
   eq(suggestNext([0, 1, 2].map(i => ({ t: T(1, 8 + i), ex: 'dl', reps: 5, kg: 0, b: 'red+blue' })), exById('dl'), T(5), 'p').next, '5 / 5 / 6 · Blau + Rot');
+});
+
+test('Typ des heutigen Workouts: laufendes Workout behält den Typ über Mitternacht, Wahl gilt 6 Stunden', () => {
+  const sat = [...wk(10, 'p', 'chin', [9, 9, 9])];                       // Schwer am 10., 08:00
+  const at = (d, h, m = 0) => new Date(2026, 9, d, h, m).getTime();
+  const late = [{ t: at(10, 23, 30), ex: 'chin', reps: 9, kg: 0, w: 'p' }];
+  eq(currentWType(late, at(11, 0, 20), null), 'p', 'nach Mitternacht im selben Workout weiter Schwer (statt Leicht):');
+  eq(currentWType(late, at(11, 12), null), 'l', 'Stunden später beginnt ein neues Workout, nach Schwer kommt Leicht:');
+  eq(currentWType(late, at(11, 0, 20), { w: 'k', at: at(11, 0, 10) }), 'k', 'gewählter Typ geht vor:');
+  eq(currentWType(late, at(11, 7), { w: 'p', at: at(11, 0, 10) }), 'l', 'nach über 6 Stunden gilt die Wahl nicht mehr:');
+  eq(currentWType([], at(11, 9), null), 'p', 'ohne Daten: Schwer'); eq(currentWType(sat, at(10, 20), null), 'p', 'heutiger Tag, Typ des letzten Satzes:');
+  eq(currentWType(sat, at(10, 7), null), 'p', 'Satz liegt (scheinbar) in der Zukunft: nächster Typ der Welle ohne Absturz');
 });
 
 /* ---- Zusammenfassung ---- */

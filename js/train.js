@@ -1,6 +1,6 @@
 import { state, save, tomb } from './store.js';
 import { EXS, BANDS, exById, byDay, isRecord, suggestNext, bandName, bandKg, bandRange, bandById, resistTxt, kgNum, num, plural,
-  fmtDay, dayKey, bodyweightFn, loadsByDay, compareLoads, workoutLoads, withChange, wtypeById, dayTypeOf, nextType, lightId,
+  fmtDay, dayKey, bodyweightFn, loadsByDay, compareLoads, workoutLoads, withChange, wtypeById, currentWType, lightId,
   cyclePos, fmtLoad, fmtPct, endOfDay, parseBand } from './logic.js';
 import { $, esc, items, loadBars, lineChart } from './ui.js';
 import { note as cleanNote, normBand } from './merge.js';
@@ -15,15 +15,10 @@ const delta = d => {
 };
 const share = v => `<span class="delta">${num(v * 100, 0)} %</span>`;
 let msgTimer, band = '';          // gewähltes Widerstandsband für den nächsten Satz ('' = keins)
-let wtype = '', wday = '';        // vom Nutzer gewählter Einheiten-Typ für heute
+let chosen = null;                // vom Nutzer gewählter Einheiten-Typ {w, at}
 
 // Typ des heutigen Workouts: gewählt, sonst der des zuletzt gespeicherten Satzes von heute, sonst der nächste in der Welle
-function currentType() {
-  const day = dayKey(Date.now());
-  if (wday === day && wtype) return wtype;
-  const todays = state.train.filter(x => dayKey(x.t) === day);
-  return todays.length ? dayTypeOf(todays) : nextType(state.train, day);
-}
+const currentType = () => currentWType(state.train, Date.now(), chosen);
 
 function fillInputs(keepBand = false) {
   const e = ex(), s = suggestNext(sets(), e, Date.now(), currentType()), l = sets().slice(-1)[0];
@@ -71,7 +66,7 @@ function renderTypes() {
     b.className = 'chip type' + (on ? ' on' : '');
     b.setAttribute('aria-pressed', on);
     b.textContent = c.name;
-    b.onclick = () => { wtype = c.ids.length > 1 ? lightId(state.train, day) : c.ids[0]; wday = day; fillInputs(); renderTrain(); };
+    b.onclick = () => { chosen = { w: c.ids.length > 1 ? lightId(state.train, day) : c.ids[0], at: Date.now() }; fillInputs(); renderTrain(); };
     box.appendChild(b);
   }
   const pos = cyclePos(cur);

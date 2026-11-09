@@ -41,7 +41,8 @@ export async function syncNow(manual) {
     const legacy = !!remote && typeof remote === 'object' && LEGACY_KEYS.some(k => k in remote);
     if (!remote || legacy || out !== JSON.stringify(sanitize(remote))) files[DATA] = { content: out };
     // Zusammenfassung bei Datenänderung, sonst höchstens stündlich aktualisieren
-    if (files[DATA] || !g.files[SUMMARY] || Date.now() - (sync.sumAt || 0) > 3600000) files[SUMMARY] = { content: buildSummary(state) };
+    // Ein Fehler in der Zusammenfassung darf den Abgleich der Daten nicht verhindern
+    if (files[DATA] || !g.files[SUMMARY] || Date.now() - (sync.sumAt || 0) > 3600000) { try { files[SUMMARY] = { content: buildSummary(state) }; } catch (e) { console.error('buildSummary', e); } }
     if (Object.keys(files).length) {
       const p = await gh('/gists/' + sync.gist, { method: 'PATCH', body: JSON.stringify({ files }) });
       if (!p.ok) throw fail(p);

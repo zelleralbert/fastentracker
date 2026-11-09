@@ -151,6 +151,15 @@ const lastCounted = (train, todayKey) => {
 export const nextType = (train, todayKey) => ({ '': 'p', l: 'k', k: 'p', p: 'l' }[lastCounted(train, todayKey)]);
 // Welcher Leicht-Typ (l oder k) ist als Nächstes dran, falls du heute leicht trainieren willst?
 export const lightId = (train, todayKey) => (lastCounted(train, todayKey) === 'l' ? 'k' : 'l');
+// Typ des heutigen Workouts. Gewählter Typ (gilt 6 Stunden), sonst der des Workouts, das gerade läuft (letzter Satz vor weniger als 4 Stunden –
+// auch über Mitternacht hinweg), sonst der des heutigen Tages, sonst der nächste in der Welle.
+export function currentWType(train, now, chosen) {
+  if (chosen && chosen.w && now - chosen.at >= 0 && now - chosen.at < 6 * H) return chosen.w;
+  const last = train.reduce((a, x) => (!a || x.t > a.t ? x : a), null);
+  if (last && now - last.t >= 0 && now - last.t < 4 * H) return wtypeOf(last);
+  const day = dayKey(now), todays = train.filter(x => dayKey(x.t) === day);
+  return todays.length ? dayTypeOf(todays) : nextType(train, day);
+}
 export const cyclePos = id => ({ l: 1, k: 2, p: 3 }[id] || 0);
 
 export const BAND_TOP = 12;      // alle Sätze mit so vielen Wiederholungen: nächstes Band probieren
