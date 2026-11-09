@@ -1,6 +1,6 @@
 import { state, save, tomb } from './store.js';
 import { EXS, BANDS, exById, byDay, sessionEnd, isCurrent, isRecord, suggestNext, bandName, bandKg, bandRange, bandById, resistTxt, kgNum, num, plural,
-  fmtDay, bodyweightFn, loadsByDay, compareLoads, workoutLoads, withChange, wtypeById, currentWType, lightId,
+  fmtDay, bodyweightFn, loadsByDay, compareLoads, workoutLoads, withChange, wtypeById, dayTypeOf, currentWType, lightId,
   cyclePos, fmtLoad, fmtPct, endOfDay, parseBand, weightAgeDays } from './logic.js';
 import { $, esc, items, loadBars, lineChart } from './ui.js';
 import { note as cleanNote, normBand } from './merge.js';
@@ -28,6 +28,10 @@ function fillInputs(keepBand = false) {
   band = e.band ? (keepBand && band ? band : s ? s.band : l && l.b ? l.b : '') : '';
   $('tNote').value = '';
 }
+
+// Gespeicherten Satz zum Ändern in die Eingabefelder laden bzw. löschen
+function startEdit(x) { editing = { t: x.t, ex: x.ex }; $('tReps').value = x.reps; $('tKg').value = x.kg || ''; band = x.b || ''; $('tNote').value = x.n || ''; renderTrain(); scrollTo(0, 0); }
+function deleteSet(x) { if (editing && editing.t === x.t) editing = null; tomb('t:' + x.ex + x.t); state.train.splice(state.train.indexOf(x), 1); save(); renderTrain(); }
 
 export function initTrain() {
   $('tSave').onclick = () => {
@@ -149,14 +153,16 @@ export function renderTrain() {
   const lastW = byDay(all).slice(-1)[0], todays = lastW && now - sessionEnd(lastW) < 24 * 3600000 ? lastW : [];
   items($('tToday'), todays.map((x, i) => ({
     html: `Satz ${i + 1} · <b>${x.reps}</b> ${e.unit}${resistTxt(x)}${x.n ? `<em>${esc(x.n)}</em>` : ''}`,
-    onEdit: () => { editing = { t: x.t, ex: x.ex }; $('tReps').value = x.reps; $('tKg').value = x.kg || ''; band = x.b || ''; $('tNote').value = x.n || ''; renderTrain(); scrollTo(0, 0); },
-    onDel: () => { if (editing && editing.t === x.t) editing = null; tomb('t:' + x.ex + x.t); state.train.splice(state.train.indexOf(x), 1); save(); renderTrain(); },
+    onEdit: () => startEdit(x), onDel: () => deleteSet(x),
   })), '');
   if (!todays.length) $('tToday').innerHTML = '';
 
   // Bewegte Last (Näherung): Wiederholungen × (Anteil des Körpergewichts + Band), Körpergewicht aus deinen Gewichtsdaten
   const bwFn = bodyweightFn(state.weight), needsBw = e.bw > 0 && !state.weight.length;
   const loads = loadsByDay(all, e, bwFn), cmp = compareLoads(loads, now);
+  // Gleichwertige Wiederholungen: bewegte Last in Wiederholungen bei deinem heutigen Gewicht (nur bei reinen Körpergewichtsübungen) – macht Einheiten
+  // bei unterschiedlichem Körpergewicht in einer gewohnten Einheit vergleichbar
+  const ref = e.bw === 1 && !e.band ? bwFn(now) : null, equiv = l => (ref ? `≙ ${num(l / ref, 1)} Wdh.` : '');
   const age = e.bw > 0 ? weightAgeDays(state.weight, now) : null;
   $('tCardNote').textContent = needsBw ? 'Trage dein Körpergewicht im Tab Gewicht ein, dann wird die bewegte Last berechnet.'
     : age != null && age > 7 ? `Letzte Gewichtsmessung vor ${age} Tagen – die bewegte Last ist ungenau. Bitte im Tab Gewicht eintragen.` : '';
@@ -185,6 +191,7 @@ export function renderTrain() {
       if (cmp.best) refs.push(cmp.isBest ? `<div><span>Bisheriger Bestwert (≈ ${fmtLoad(cmp.best.load)})</span><span class="badge">Neuer Bestwert</span></div>`
         : row(`Bestwert (≈ ${fmtLoad(cmp.best.load)}, ${fmtDay(cmp.best.t)})`, cmp.pctBest));
     }
+    if (ref) refs.unshift(`<div><span>Gleichwertig bei ${num(ref, 1)} kg Körpergewicht (Trend)</span><span class="delta">${equiv(cur.load)}</span></div>`);
     $('tCardRefs').innerHTML = refs.join(''); $('tCardRefs').hidden = !refs.length;
   }
 
@@ -200,11 +207,17 @@ export function renderTrain() {
   $('tChartCap').hidden = $('tChartLeg').hidden = !shown; if (!shown) $('tChart').setAttribute('hidden', '');
   $('tChartLeg').lastElementChild.hidden = !early.length;
 
+  // Sätze früherer Workouts (neueste zuerst, ohne das oben gezeigte) zum Ändern oder Löschen
+  items($('tSets'), () => byDay(all).filter(g => !todays.length || g[0].t !== todays[0].t).reverse().slice(0, 10).flatMap(g => g.map((x, i) => ({
+    html: `${fmtDay(g[0].t)} · ${wtypeById(dayTypeOf(g)).name} · Satz ${i + 1} · <b>${x.reps}</b> ${e.unit}${resistTxt(x)}${x.n ? `<em>${esc(x.n)}</em>` : ''}`,
+    onEdit: () => startEdit(x), onDel: () => deleteSet(x), confirmText: 'Diesen Satz löschen?',
+  }))), 'Keine früheren Workouts dieser Übung.');
+
   // Frühere Schwer-Einheiten; bei Schwer der Prozentwert des Fortschritts, sonst der Anteil an der jeweiligen Schwer-Einheit
   items($('tHist'), () => (cmp ? cmp.before.slice().reverse().slice(0, 20) : []).map(l => {
     const d = byDay(all).find(x => x[0].t === l.t) || [], v = cmp.pctVs(l);
     const notes = d.filter(x => x.n).map(x => esc(x.n));
-    return { html: `${fmtDay(l.t)}<small>${d.map(setTxt).join(' / ')} · ≈ ${fmtLoad(l.load)} · ${cmp.light ? 'heute' : cmp.isToday ? 'heute' : 'zuletzt'} ${cmp.light ? (v == null ? '' : share(v)) : delta(v)}</small>${notes.length ? `<em>${notes.join(' · ')}</em>` : ''}` };
+    return { html: `${fmtDay(l.t)}<small>${d.map(setTxt).join(' / ')} · ≈ ${fmtLoad(l.load)}${ref ? ' · ' + equiv(l.load) : ''} · ${cmp.light ? 'heute' : cmp.isToday ? 'heute' : 'zuletzt'} ${cmp.light ? (v == null ? '' : share(v)) : delta(v)}</small>${notes.length ? `<em>${notes.join(' · ')}</em>` : ''}` };
   }), 'Noch keine früheren Schwer-Einheiten dieser Übung.');
 
   // Alle Übungen eines Trainingstags zusammen (eingeklappt); Balken nur Schwer-Einheiten
