@@ -27,7 +27,7 @@ function block(s, now, days, withNotes) {
   const tr = (s.train || []).filter(x => x.t >= from);
   if (tr.length) {
     const bwFn = bodyweightFn(s.weight || []);
-    L.push('', '| Übung | Tage | Sätze | Bestes Set | Summe | Bewegte Last (≈) |', '|---|---|---|---|---|---|');
+    L.push('', '| Übung | Workouts | Sätze | Bestes Set | Summe | Bewegte Last (≈) |', '|---|---|---|---|---|---|');
     for (const ex of EXS) {
       const sets = tr.filter(x => x.ex === ex.id);
       if (!sets.length) continue;

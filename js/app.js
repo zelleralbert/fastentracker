@@ -7,7 +7,7 @@ import { initWeight, renderWeight } from './weight.js';
 import { initSync, renderSettings } from './sync.js';
 import { initTheme } from './theme.js';
 
-const VERSION = '3.12';
+const VERSION = '3.13';
 const TITLES = { sleep: 'Schlaf', train: 'Training', weight: 'Gewicht', settings: 'Einstellungen' };
 
 // Jeder Bereich wird einzeln abgesichert: ein Fehler in einem darf die übrigen nicht blockieren.
@@ -61,7 +61,11 @@ setInterval(() => {
   const d = dayKey(Date.now());
   if (d !== shownDay) { shownDay = d; renderAll(); }
   // „Nächster Schlaf“ und „Jetzt erwartet“ veralten, wenn die App stundenlang offen bleibt: alle 5 Minuten auffrischen
-  else if (++ticks % 300 === 0) { try { renderDrift(); } catch (e) { console.error('renderDrift', e); } }
+  else if (++ticks % 300 === 0) {
+    try { renderDrift(); } catch (e) { console.error('renderDrift', e); }
+    // Ein Workout endet 4 Stunden nach dem letzten Satz: Typ und Vorschlag im Training-Tab auffrischen (nicht beim Bearbeiten/Tippen)
+    if (current === 'train' && !document.activeElement?.matches?.('input')) { try { renderTrain(); } catch (e) { console.error('renderTrain', e); } }
+  }
 }, 1000);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') renderAll(); });
 

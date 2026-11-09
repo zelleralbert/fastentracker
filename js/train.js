@@ -83,7 +83,7 @@ function renderTypes() {
     b.className = 'chip type' + (on ? ' on' : '');
     b.setAttribute('aria-pressed', on);
     b.textContent = c.name;
-    b.onclick = () => { chosen = { w: c.ids.length > 1 ? lightId(state.train, Date.now()) : c.ids[0], at: Date.now() }; fillInputs(); renderTrain(); };
+    b.onclick = () => { chosen = { w: c.ids.length > 1 ? lightId(state.train, Date.now()) : c.ids[0], at: Date.now() }; if (!editing) fillInputs(); renderTrain(); };
     box.appendChild(b);
   }
   const pos = cyclePos(cur);
