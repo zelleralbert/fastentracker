@@ -149,8 +149,8 @@ export function renderTrain() {
   if (s) $('tSuggest').innerHTML = `${tn} · Ziel <b>${s.next}</b>${s.amrap ? ', letzter Satz so viele wie möglich' : ''}<br><span class="muted">letzte Schwer-Einheit (${fmtDay(s.day)}): ${s.last}</span>`
     + (s.bandUp ? `<br>Alle Sätze ≥ 12: ${bandName(s.bandUp.to)} (≈ ${num(bandKg(s.bandUp.to), 0)} kg) statt ${bandName(s.bandUp.from)} probieren` : '');
 
-  // Sätze des laufenden bzw. des letzten Workouts dieser Übung (bis 24 Stunden danach), zum Ändern und Löschen
-  const lastW = byDay(all).slice(-1)[0], todays = lastW && now - sessionEnd(lastW) < 24 * 3600000 ? lastW : [];
+  // Sätze des laufenden Workouts dieser Übung (letzter Satz vor weniger als 4 Stunden); ältere stehen unter „Sätze früherer Workouts ändern“
+  const lastW = byDay(all).slice(-1)[0], todays = lastW && isCurrent(sessionEnd(lastW), now) ? lastW : [];
   items($('tToday'), todays.map((x, i) => ({
     html: `Satz ${i + 1} · <b>${x.reps}</b> ${e.unit}${resistTxt(x)}${x.n ? `<em>${esc(x.n)}</em>` : ''}`,
     onEdit: () => startEdit(x), onDel: () => deleteSet(x),
