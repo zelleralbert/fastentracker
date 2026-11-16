@@ -1,7 +1,7 @@
 // Kompakte Markdown-Zusammenfassung, die beim Sync als zusammenfassung.md ins Gist geschrieben wird (für Claude).
 import { analyzeDrift } from './drift.js';
 import { dayKey } from './merge.js';
-import { H, rangeTitle, plural, num, kgNum, fmtDate, fmtShort, fmtFull, fmtHM, hhmm, avg, avgClock, movingAvg, rangeStart, EXS, topSet, byDay, bodyweightFn, loadOf, loadsByDay, workoutLoads, fmtLoad, fmtPct, resistTxt, BANDS, withChange, wtypeById, nextType } from './logic.js';
+import { H, rangeTitle, plural, num, kgNum, fmtDate, fmtShort, fmtFull, fmtHM, hhmm, avg, avgClock, movingAvg, rangeStart, EXS, topSet, sessionsOf, bodyweightFn, loadOf, loadsByDay, workoutLoads, fmtLoad, fmtPct, resistTxt, BANDS, withChange, wtypeById, nextType } from './logic.js';
 
 const sign = v => (v > 0 ? '+' : v < 0 ? '−' : '±') + num(Math.abs(v));
 
@@ -32,12 +32,12 @@ function block(s, now, days, withNotes) {
       const sets = tr.filter(x => x.ex === ex.id);
       if (!sets.length) continue;
       const b = topSet(sets);
-      L.push(`| ${ex.name} | ${byDay(sets).length} | ${sets.length} | ${b.reps} ${ex.unit}${resistTxt(b)} | ${sets.reduce((a, x) => a + x.reps, 0)} ${ex.unit} | ${(l => (l == null ? '?' : fmtLoad(l)))(loadOf(sets, ex, bwFn))} |`);
+      L.push(`| ${ex.name} | ${sessionsOf(sets, s.train || []).length} | ${sets.length} | ${b.reps} ${ex.unit}${resistTxt(b)} | ${sets.reduce((a, x) => a + x.reps, 0)} ${ex.unit} | ${(l => (l == null ? '?' : fmtLoad(l)))(loadOf(sets, ex, bwFn))} |`);
     }
     // Entwicklung der bewegten Last je Schwer-Einheit (die Veränderung bezieht sich auf die jeweils vorige Schwer-Einheit)
     const dev = [];
     for (const ex of EXS) {
-      const all = loadsByDay((s.train || []).filter(x => x.ex === ex.id), ex, bwFn);
+      const all = loadsByDay((s.train || []).filter(x => x.ex === ex.id), ex, bwFn, s.train || []);
       const ls = withChange(all.filter(l => l.w === 'p')).filter(l => l.t >= from).slice(-5);
       if (ls.length >= 2) dev.push(`- ${ex.name}: ${ls.map(l => fmtLoad(l.load)).join(' → ')} (zuletzt ${fmtPct(ls[ls.length - 1].d)})`);
     }

@@ -1,6 +1,6 @@
 // Tests für Zusammenführung, Logik und Zusammenfassung. Laufen im Browser über test/index.html.
 import { mergeDocs, sanitize, normBand, EX_IDS, SCHEMA, dayKey, LEGACY_KEYS, BAND_IDS, purgeExercises, tagDays, WTYPE_IDS } from '../js/merge.js';
-import { avgClock, movingAvg, suggestNext, isRecord, exById, buckets, rangeStart, endOfDay, bodyweightFn, setLoad, loadOf, fmtLoad, BANDS, bandKg, bandRange, bandName, parseBand, resistTxt, topSet, loadsByDay, workoutLoads, fmtPct, compareLoads, WTYPES, wtypeOf, dayTypeOf, nextType, lightId, currentWType, withChange, nextBand, weightAgeDays, byDay, SESSION_GAP, isCurrent, D, H } from '../js/logic.js';
+import { avgClock, movingAvg, suggestNext, isRecord, exById, buckets, rangeStart, endOfDay, bodyweightFn, setLoad, loadOf, fmtLoad, BANDS, bandKg, bandRange, bandName, parseBand, resistTxt, topSet, loadsByDay, workoutLoads, fmtPct, compareLoads, WTYPES, wtypeOf, dayTypeOf, nextType, lightId, currentWType, withChange, nextBand, weightAgeDays, byDay, sessionsOf, SESSION_GAP, isCurrent, D, H } from '../js/logic.js';
 import { buildSummary } from '../js/summary.js';
 import { analyzeDrift, mainSleeps } from '../js/drift.js';
 import { lineChart } from '../js/ui.js';
@@ -787,6 +787,24 @@ test('Zahl der Sätze: übliche der letzten drei Workouts, ein einzelner Zusatzs
   eq(suggestNext([...wk(1, 'p', 'dips', [9, 9, 9, 9]), ...wk(4, 'l', 'dips', [6, 6, 6, 6]), ...wk(7, 'p', 'dips', [9, 10, 10, 10])], e, now, 'l').next, '6 / 7 / 7 / 7', 'wer regelmäßig vier macht, bekommt vier:');
   eq(suggestNext([...wk(1, 'p', 'dips', [9, 9, 9, 9]), ...wk(4, 'l', 'dips', [6, 6, 6]), ...wk(7, 'p', 'dips', [9, 10, 10])], e, now, 'l').next, '6 / 7 / 7', 'weniger Sätze als früher: so viele wie zuletzt:');
   eq(suggestNext(wk(1, 'p', 'dips', [9, 10, 10, 10]), e, now, 'l').next, '6 / 7 / 7 / 7', 'nur ein Workout: alle Sätze:');
+});
+
+test('Langes Workout: eine Übung bleibt Teil des laufenden Workouts, auch wenn ihr letzter Satz über 4 Stunden her ist', () => {
+  const at = (h, m = 0) => new Date(2026, 9, 10, h, m).getTime(), s = (t, ex, reps, w = 'p') => ({ t, ex, reps, kg: 0, w });
+  const old = [s(at(8) - 3 * D, 'chin', 9), s(at(8, 5) - 3 * D, 'chin', 9), s(at(8, 10) - 3 * D, 'chin', 9)];
+  // heute: Chin-ups um 7:30–8:00, danach andere Übungen bis 13:30 (jeweils unter 4 Stunden Pause)
+  const today = [s(at(7, 30), 'chin', 9), s(at(7, 45), 'chin', 9), s(at(8), 'chin', 10), s(at(10, 30), 'dips', 9), s(at(13), 'dips', 9), s(at(13, 30), 'dips', 9)];
+  const train = [...old, ...today], chin = train.filter(x => x.ex === 'chin'), now = at(13, 40), e = exById('chin');
+  eq(sessionsOf(chin, train).map(g => [g.length, g.end]), [[3, at(8, 10) - 3 * D], [3, at(13, 30)]], 'Ende = letzter Satz des ganzen Workouts:');
+  eq(sessionsOf(chin).map(g => g.end), [at(8, 10) - 3 * D, at(8)], 'ohne die anderen Übungen nur die eigenen Sätze:');
+  eq(suggestNext(chin, e, now, 'p', train).last, '9 / 9 / 9', 'Vorschlag bezieht sich auf das frühere Workout, nicht auf die heutigen Sätze:');
+  eq(suggestNext(chin, e, now, 'p').last, '9 / 9 / 10', 'ohne Gesamtsicht wären die heutigen Sätze schon „früher“ (der Fehler):');
+  const bw = bodyweightFn([{ t: at(1) - 5 * D, kg: 80 }]);
+  eq(compareLoads(loadsByDay(chin, e, bw, train), now).isToday, true, 'Karte zeigt „Heute“:'); eq(compareLoads(loadsByDay(chin, e, bw), now).isToday, false);
+  // zwei Sätze derselben Übung mit über 4 Stunden Abstand im selben Workout bleiben eine Einheit
+  const split = [s(at(7), 'chin', 9), s(at(9), 'dips', 9), s(at(11, 30), 'chin', 9)];
+  eq(sessionsOf(split.filter(x => x.ex === 'chin'), split).length, 1); eq(sessionsOf(split.filter(x => x.ex === 'chin')).length, 2);
+  eq(sessionsOf([], train), []);
 });
 
 /* ---- Zusammenfassung ---- */

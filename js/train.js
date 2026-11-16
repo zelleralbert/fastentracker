@@ -1,5 +1,5 @@
 import { state, save, tomb } from './store.js';
-import { EXS, BANDS, exById, byDay, sessionEnd, isCurrent, isRecord, suggestNext, bandName, bandKg, bandRange, bandById, resistTxt, kgNum, num, plural,
+import { EXS, BANDS, exById, sessionsOf, isCurrent, isRecord, suggestNext, bandName, bandKg, bandRange, bandById, resistTxt, kgNum, num, plural,
   fmtDay, bodyweightFn, loadsByDay, compareLoads, workoutLoads, withChange, wtypeById, dayTypeOf, currentWType, lightId,
   cyclePos, fmtLoad, fmtPct, endOfDay, parseBand, weightAgeDays } from './logic.js';
 import { $, esc, items, loadBars, lineChart } from './ui.js';
@@ -22,7 +22,7 @@ let chosen = null;                // vom Nutzer gewählter Einheiten-Typ {w, at}
 const currentType = () => currentWType(state.train, Date.now(), chosen);
 
 function fillInputs(keepBand = false) {
-  const e = ex(), s = suggestNext(sets(), e, Date.now(), currentType()), l = sets().slice(-1)[0];
+  const e = ex(), s = suggestNext(sets(), e, Date.now(), currentType(), state.train), l = sets().slice(-1)[0];
   $('tReps').value = s ? s.reps : l ? l.reps : '';
   $('tKg').value = e.band ? '' : s ? (s.kg || '') : l && l.kg ? l.kg : '';
   band = e.band ? (keepBand && band ? band : s ? s.band : l && l.b ? l.b : '') : '';
@@ -144,13 +144,13 @@ export function renderTrain() {
     : e.hint;
 
   // Ziel für heute aus der letzten Schwer-Einheit
-  const s = suggestNext(all, e, Date.now(), type), tn = wtypeById(type).name;
+  const s = suggestNext(all, e, Date.now(), type, state.train), tn = wtypeById(type).name;
   $('tSuggest').hidden = !s;
   if (s) $('tSuggest').innerHTML = `${tn} · Ziel <b>${s.next}</b>${s.amrap ? ', letzter Satz so viele wie möglich' : ''}<br><span class="muted">letzte Schwer-Einheit (${fmtDay(s.day)}): ${s.last}</span>`
     + (s.bandUp ? `<br>Alle Sätze ≥ 12: ${bandName(s.bandUp.to)} (≈ ${num(bandKg(s.bandUp.to), 0)} kg) statt ${bandName(s.bandUp.from)} probieren` : '');
 
   // Sätze des laufenden Workouts dieser Übung (letzter Satz vor weniger als 4 Stunden); ältere stehen unter „Sätze früherer Workouts ändern“
-  const lastW = byDay(all).slice(-1)[0], todays = lastW && isCurrent(sessionEnd(lastW), now) ? lastW : [];
+  const groups = sessionsOf(all, state.train), lastW = groups[groups.length - 1], todays = lastW && isCurrent(lastW.end, now) ? lastW : [];
   items($('tToday'), todays.map((x, i) => ({
     html: `Satz ${i + 1} · <b>${x.reps}</b> ${e.unit}${resistTxt(x)}${x.n ? `<em>${esc(x.n)}</em>` : ''}`,
     onEdit: () => startEdit(x), onDel: () => deleteSet(x),
@@ -159,7 +159,7 @@ export function renderTrain() {
 
   // Bewegte Last (Näherung): Wiederholungen × (Anteil des Körpergewichts + Band), Körpergewicht aus deinen Gewichtsdaten
   const bwFn = bodyweightFn(state.weight), needsBw = e.bw > 0 && !state.weight.length;
-  const loads = loadsByDay(all, e, bwFn), cmp = compareLoads(loads, now);
+  const loads = loadsByDay(all, e, bwFn, state.train), cmp = compareLoads(loads, now);
   // Gleichwertige Wiederholungen: bewegte Last in Wiederholungen bei deinem heutigen Gewicht (nur bei reinen Körpergewichtsübungen) – macht Einheiten
   // bei unterschiedlichem Körpergewicht in einer gewohnten Einheit vergleichbar
   const ref = e.bw === 1 && !e.band ? bwFn(now) : null, equiv = l => (ref ? `≙ ${num(l / ref, 1)} Wdh.` : '');
@@ -208,14 +208,14 @@ export function renderTrain() {
   $('tChartLeg').lastElementChild.hidden = !early.length;
 
   // Sätze früherer Workouts (neueste zuerst, ohne das oben gezeigte) zum Ändern oder Löschen
-  items($('tSets'), () => byDay(all).filter(g => !todays.length || g[0].t !== todays[0].t).reverse().slice(0, 10).flatMap(g => g.map((x, i) => ({
+  items($('tSets'), () => groups.filter(g => !todays.length || g[0].t !== todays[0].t).reverse().slice(0, 10).flatMap(g => g.map((x, i) => ({
     html: `${fmtDay(g[0].t)} · ${wtypeById(dayTypeOf(g)).name} · Satz ${i + 1} · <b>${x.reps}</b> ${e.unit}${resistTxt(x)}${x.n ? `<em>${esc(x.n)}</em>` : ''}`,
     onEdit: () => startEdit(x), onDel: () => deleteSet(x), confirmText: 'Diesen Satz löschen?',
   }))), 'Keine früheren Workouts dieser Übung.');
 
   // Frühere Schwer-Einheiten; bei Schwer der Prozentwert des Fortschritts, sonst der Anteil an der jeweiligen Schwer-Einheit
   items($('tHist'), () => (cmp ? cmp.before.slice().reverse().slice(0, 20) : []).map(l => {
-    const d = byDay(all).find(x => x[0].t === l.t) || [], v = cmp.pctVs(l);
+    const d = groups.find(x => x[0].t === l.t) || [], v = cmp.pctVs(l);
     const notes = d.filter(x => x.n).map(x => esc(x.n));
     return { html: `${fmtDay(l.t)}<small>${d.map(setTxt).join(' / ')} · ≈ ${fmtLoad(l.load)}${ref ? ' · ' + equiv(l.load) : ''} · ${cmp.light ? 'heute' : cmp.isToday ? 'heute' : 'zuletzt'} ${cmp.light ? (v == null ? '' : share(v)) : delta(v)}</small>${notes.length ? `<em>${notes.join(' · ')}</em>` : ''}` };
   }), 'Noch keine früheren Schwer-Einheiten dieser Übung.');

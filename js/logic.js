@@ -132,6 +132,14 @@ export function byDay(sets) {
   return out;
 }
 export const sessionEnd = s => s[s.length - 1].t;
+// Workouts einer Übung. Mit `train` (alle Sätze aller Übungen) wird über das ganze Workout gruppiert: Ein langes Workout bleibt eines, auch wenn
+// zwischen zwei Sätzen derselben Übung mehr als 4 Stunden liegen, und es gilt als laufend, solange irgendeine Übung weitergeht.
+// Jede Gruppe enthält nur die Sätze aus `sets`; `end` = letzter Satz des ganzen Workouts.
+export function sessionsOf(sets, train) {
+  if (!train) return byDay(sets).map(g => Object.assign(g, { end: sessionEnd(g) }));
+  const mine = new Set(sets);
+  return byDay(train).map(g => Object.assign(g.filter(x => mine.has(x)), { end: sessionEnd(g) })).filter(g => g.length);
+}
 // Läuft das Workout noch? (letzter Satz vor weniger als 4 Stunden)
 export const isCurrent = (endT, now) => now - endT < SESSION_GAP;
 export const isRecord = (prev, reps, lvl) => prev.length > 0 && !prev.some(x => lv(x) > lvl + 1e-9 || (Math.abs(lv(x) - lvl) < 1e-9 && x.reps >= reps));
@@ -195,8 +203,8 @@ export const weightAgeDays = (weights, now) => {
 // Ziel für heute, abgeleitet aus der letzten Schwer-Einheit der Übung (gibt es keine, aus der letzten Einheit):
 // Gewicht und Band bleiben gleich, die Zahl der Sätze auch. Schwer: schwächster Satz (bei Gleichstand der letzte) eine
 // Wiederholung mehr, letzter Satz so viele wie möglich. Leicht: Anteil der Wiederholungen.
-export function suggestNext(sets, ex, now = Date.now(), type = 'p') {
-  const days = byDay(sets).filter(d => !isCurrent(sessionEnd(d), now));
+export function suggestNext(sets, ex, now = Date.now(), type = 'p', train = null) {
+  const days = sessionsOf(sets, train).filter(d => !isCurrent(d.end, now));
   if (!days.length) return null;
   const counted = days.filter(d => dayTypeOf(d) !== 'o');
   const refDay = [...counted].reverse().find(d => dayTypeOf(d) === 'p') || counted[counted.length - 1] || days[days.length - 1];
@@ -257,8 +265,8 @@ export const fmtPct = d => (d == null ? '–' : `${d > 0.0005 ? '+' : d < -0.000
 // Jede Einheit bekommt die Veränderung d (Anteil, z. B. 0,067) gegenüber der vorigen; die erste hat null.
 export const withChange = list => list.map((x, i) => ({ ...x, d: i && list[i - 1].load > 0 ? x.load / list[i - 1].load - 1 : null }));
 // Bewegte Last je Workout für eine Übung: [{t (Beginn), end (letzter Satz), load, reps, n, w (Einheiten-Typ), d}]
-export function loadsByDay(sets, ex, bwFn) {
-  return withChange(byDay(sets).map(d => ({ t: d[0].t, end: sessionEnd(d), load: loadOf(d, ex, bwFn), reps: d.reduce((a, x) => a + x.reps, 0), n: d.length, w: dayTypeOf(d) }))
+export function loadsByDay(sets, ex, bwFn, train = null) {
+  return withChange(sessionsOf(sets, train).map(d => ({ t: d[0].t, end: d.end, load: loadOf(d, ex, bwFn), reps: d.reduce((a, x) => a + x.reps, 0), n: d.length, w: dayTypeOf(d) }))
     .filter(x => x.load != null && x.load > 0));
 }
 // Bewegte Last je Trainingstag über alle Übungen: [{t, load, per:{übung: kg}, w, d}]
