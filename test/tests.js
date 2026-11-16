@@ -778,6 +778,17 @@ test('Gewichtsalter: Tage seit der letzten Messung; Datenversion schützt vor Ü
   eq(mergeDocs(doc({}), doc({ mod: 5 })).v, SCHEMA);
 });
 
+test('Zahl der Sätze: übliche der letzten drei Workouts, ein einzelner Zusatzsatz zählt nicht dauerhaft', () => {
+  const e = exById('dips'), now = T(30);
+  const s334 = [...wk(1, 'p', 'dips', [9, 9, 9]), ...wk(4, 'l', 'dips', [6, 6, 6]), ...wk(7, 'p', 'dips', [9, 10, 10, 10])];
+  const l = suggestNext(s334, e, now, 'l'), p = suggestNext(s334, e, now, 'p');
+  eq(l.next, '6 / 7 / 7', 'Leicht: drei Sätze statt vier:'); eq(p.next, '10 / 10 / 10', 'Schwer: drei Sätze:'); eq(l.last, '9 / 10 / 10 / 10', 'Anzeige der letzten Einheit bleibt vollständig:');
+  eq(suggestNext([...wk(1, 'p', 'dips', [9, 9, 9]), ...wk(7, 'p', 'dips', [9, 10, 10, 10])], e, now, 'l').next, '6 / 7 / 7 / 7', 'bei Gleichstand der neuere Wert (4):');
+  eq(suggestNext([...wk(1, 'p', 'dips', [9, 9, 9, 9]), ...wk(4, 'l', 'dips', [6, 6, 6, 6]), ...wk(7, 'p', 'dips', [9, 10, 10, 10])], e, now, 'l').next, '6 / 7 / 7 / 7', 'wer regelmäßig vier macht, bekommt vier:');
+  eq(suggestNext([...wk(1, 'p', 'dips', [9, 9, 9, 9]), ...wk(4, 'l', 'dips', [6, 6, 6]), ...wk(7, 'p', 'dips', [9, 10, 10])], e, now, 'l').next, '6 / 7 / 7', 'weniger Sätze als früher: so viele wie zuletzt:');
+  eq(suggestNext(wk(1, 'p', 'dips', [9, 10, 10, 10]), e, now, 'l').next, '6 / 7 / 7 / 7', 'nur ein Workout: alle Sätze:');
+});
+
 /* ---- Zusammenfassung ---- */
 test('Zusammenfassung mit leeren Daten', () => {
   const s = buildSummary(doc({}), T(19));

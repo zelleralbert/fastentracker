@@ -205,13 +205,17 @@ export function suggestNext(sets, ex, now = Date.now(), type = 'p') {
   const lvls = [...new Set(refDay.map(lv))], multi = lvls.filter(k => count(k) >= 2);
   const top = Math.max(...(multi.length ? multi : lvls));
   const grp = refDay.filter(x => lv(x) === top), ref = grp[grp.length - 1];
-  const r = grp.map(x => x.reps), t = wtypeById(type);
+  const all = grp.map(x => x.reps), t = wtypeById(type);
+  // Zahl der Sätze: die übliche der letzten drei Workouts (häufigster Wert, bei Gleichstand der neuere). Ein einzelner Zusatzsatz in der
+  // letzten Einheit macht aus 3 Sätzen also nicht dauerhaft 4; überzählige Sätze am Ende werden für das Ziel weggelassen.
+  const sizes = counted.slice(-3).map(d => d.length), usual = [...new Set(sizes)].sort((x, y) => sizes.filter(v => v === y).length - sizes.filter(v => v === x).length || sizes.lastIndexOf(y) - sizes.lastIndexOf(x))[0];
+  const r = all.length > usual ? all.slice(0, usual) : all;
   let target;
   if (t.id === 'p') { target = r.slice(); target[target.lastIndexOf(Math.min(...target))] += ex.inc || 1; }   // bei Gleichstand der letzte (müdeste) Satz
   else { target = r.map(v => Math.max(1, Math.round(v * t.pct))); }
   const up = ex.band && t.id === 'p' && ref.b && r.every(v => v >= BAND_TOP) ? nextBand(ref.b) : '';
   return {
-    day: refDay[0].t, last: r.join(' / ') + resistTxt(ref), next: target.join(' / ') + resistTxt(ref), reps: target[0],
+    day: refDay[0].t, last: all.join(' / ') + resistTxt(ref), next: target.join(' / ') + resistTxt(ref), reps: target[0],
     kg: ref.kg, band: ref.b || '', type: t.id, amrap: t.id === 'p', bandUp: up ? { from: ref.b, to: up } : null,
   };
 }
